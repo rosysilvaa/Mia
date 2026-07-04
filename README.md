@@ -28,11 +28,8 @@ O projeto foi construído utilizando as tecnologias fundamentais da web para gar
 
 ## 📸 Demonstração
 
-*(Adicione aqui um GIF ou prints do seu aplicativo em funcionamento)*
+<img width="1920" height="1080" alt="Screenshot 2026-07-04 131427" src="https://github.com/user-attachments/assets/75248865-4833-478b-a3e8-ad146bf1bf01" />
 
-![Demonstração do App Mia](https://via.placeholder.com/800x450.png?text=Preview+do+App+Mia)
-
----
 
 ## 📦 Como Executar o Projeto
 
