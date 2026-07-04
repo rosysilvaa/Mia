@@ -63,6 +63,59 @@
     return [...tasks].sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time));
   }
 
+  function getDayDotCategories(dayTasks){
+    if(!dayTasks || !dayTasks.length) return [];
+    if(dayTasks.length === 1) return [dayTasks[0].category];
+    const firstTwo = dayTasks.slice(0, 2).map((task)=> task.category);
+    return firstTwo.length === 1 ? [firstTwo[0], firstTwo[0]] : firstTwo;
+  }
+
+  function openTaskDetail(task){
+    const overlayDetail = document.getElementById('overlay-detail');
+    if(!overlayDetail || !task) return;
+
+    const detailBadge = document.getElementById('detail-badge');
+    const detailTitle = document.getElementById('detail-title');
+    const detailDate = document.getElementById('detail-date');
+    const detailTime = document.getElementById('detail-time');
+    const detailPlace = document.getElementById('detail-place');
+    const detailPlaceWrapper = document.getElementById('detail-place-wrapper');
+    const detailIA = document.getElementById('detail-ia-text');
+    const detailDelegate = document.getElementById('detail-delegate-select');
+    const delegatedStatusText = document.getElementById('delegated-status-text');
+
+    if(detailBadge){
+      detailBadge.textContent = CATEGORY_LABEL[task.category] || 'Categoria';
+      detailBadge.className = `badge ${task.category}`;
+    }
+    if(detailTitle) detailTitle.textContent = task.title;
+    if(detailDate) detailDate.textContent = task.date.split('-').reverse().join('/');
+    if(detailTime) detailTime.textContent = task.time;
+    if(detailPlace) detailPlace.textContent = task.place || 'Local não informado';
+    if(detailPlaceWrapper) detailPlaceWrapper.style.display = 'block';
+    if(detailIA){
+      detailIA.textContent = task.category === 'trabalho'
+        ? 'MIA diz: Para um compromisso de trabalho, vale deixar tudo organizado com antecedência e pedir apoio se o dia apertar.'
+        : task.category === 'familia'
+          ? 'MIA diz: Compromissos com a família costumam pesar mais na rotina. Se precisar, peça ajuda sem culpa.'
+          : 'MIA diz: Esse é o seu momento. Tente preservar esse compromisso como um cuidado com você.';
+    }
+    if(detailDelegate) detailDelegate.value = '';
+    if(delegatedStatusText){
+      delegatedStatusText.style.display = 'none';
+      delegatedStatusText.textContent = '';
+    }
+
+    overlayDetail.classList.add('open');
+  }
+
+  const overlayDetail = document.getElementById('overlay-detail');
+  if(overlayDetail){
+    const closeDetail = document.getElementById('close-detail');
+    if(closeDetail) closeDetail.addEventListener('click', ()=> overlayDetail.classList.remove('open'));
+    overlayDetail.addEventListener('click', (e)=>{ if(e.target === overlayDetail) overlayDetail.classList.remove('open'); });
+  }
+
   function renderTaskList(){
     const list = document.getElementById('task-list');
     if(!list) return;
@@ -83,6 +136,7 @@
         </div>
         <span class="badge ${t.category}">${CATEGORY_LABEL[t.category]}</span>
       `;
+      card.addEventListener('click', ()=> openTaskDetail(t));
       list.appendChild(card);
     });
     const verMaisBtn = document.getElementById('ver-mais-btn');
@@ -90,6 +144,89 @@
       verMaisBtn.style.display = ordered.length > 3 ? 'block' : 'none';
       verMaisBtn.textContent = showingAll ? 'Ver menos' : 'Ver mais';
     }
+  }
+
+  function formatDateBR(iso){
+    if(!iso) return 'sem data';
+    const [year, month, day] = iso.split('-');
+    return `${day}/${month}/${year}`;
+  }
+
+  function buildEmergencyOptions(){
+    const defaultContacts = [
+      { id: 'contato-chefe', name: 'Chefe - Carlos', phone: '(11) 99999-0001' },
+      { id: 'contato-coordenadora', name: 'Coordenação - Patrícia', phone: '(11) 98888-2222' },
+      { id: 'contato-rh', name: 'RH - Juliana', phone: '(11) 97777-3333' },
+      { id: 'contato-lider', name: 'Liderança - André', phone: '(11) 96666-4444' },
+    ];
+    const workTasks = sortedTasks().filter((task)=> task.category === 'trabalho');
+    return {
+      contacts: defaultContacts,
+      tasks: workTasks.length ? workTasks.slice(0, 5) : [
+        { id: 901, title: 'Reunião com a equipe', category: 'trabalho', date: todayISO(), time: '09:00', place: 'Sala de reunião' },
+        { id: 902, title: 'Reunião com a coordenação', category: 'trabalho', date: addDays(1), time: '14:30', place: 'Escritório' },
+      ],
+    };
+  }
+
+  function updateEmergencyPreview(){
+    const taskSelect = document.getElementById('emg-task-select');
+    const contactSelect = document.getElementById('emg-contact-select');
+    const taskTitle = document.getElementById('emg-task-title');
+    const taskMeta = document.getElementById('emg-task-meta');
+    const suggestedContact = document.getElementById('emg-suggested-contact');
+    const messagePreview = document.getElementById('emg-message-preview');
+    const confirmCopy = document.getElementById('emg-confirm-copy');
+
+    if(!taskSelect || !contactSelect || !taskTitle || !taskMeta || !suggestedContact || !messagePreview || !confirmCopy) return;
+
+    const selectedTask = tasks.find((task)=> String(task.id) === taskSelect.value) || tasks[0] || null;
+    const selectedContact = contactSelect.options[contactSelect.selectedIndex] || null;
+    const contactLabel = selectedContact ? selectedContact.textContent : 'Contato de confiança';
+
+    if(selectedTask){
+      taskTitle.textContent = selectedTask.title;
+      taskMeta.textContent = `${formatDateBR(selectedTask.date)} às ${selectedTask.time} · ${selectedTask.place || 'sem local informado'}`;
+    } else {
+      taskTitle.textContent = 'Compromisso próximo';
+      taskMeta.textContent = 'Horário e contexto serão preenchidos pela MIA.';
+    }
+
+    suggestedContact.textContent = contactLabel;
+
+    const messageLines = [
+      `Oi, ${contactLabel}.`,
+      '',
+      selectedTask
+        ? `Estou com um compromisso de trabalho (${selectedTask.title}) e não vou conseguir comparecer, em ${formatDateBR(selectedTask.date)} às ${selectedTask.time}.`
+        : 'Estou com um compromisso de trabalho e não vou conseguir comparecer no horário previsto.',
+      selectedTask?.place ? `Local: ${selectedTask.place}.` : 'Local: estou em deslocamento para o compromisso.',
+      '',
+      'Por favor, avise o chefe e considere isso como uma prioridade.'
+    ];
+
+    messagePreview.textContent = messageLines.join('\n');
+    confirmCopy.textContent = `Essa mensagem será enviada para ${contactLabel}${selectedTask ? ` sobre ${selectedTask.title}` : ''}.`;
+  }
+
+  function fillEmergencyDemoData(){
+    const taskSelect = document.getElementById('emg-task-select');
+    const contactSelect = document.getElementById('emg-contact-select');
+    if(!taskSelect || !contactSelect) return;
+
+    const { contacts, tasks: emergencyTasks } = buildEmergencyOptions();
+
+    taskSelect.innerHTML = emergencyTasks.map((task)=> `
+      <option value="${task.id}">${task.title} - ${formatDateBR(task.date)} ${task.time}</option>
+    `).join('');
+
+    contactSelect.innerHTML = contacts.map((contact)=> `
+      <option value="${contact.id}">${contact.name} (${contact.phone})</option>
+    `).join('');
+
+    if(!taskSelect.value && emergencyTasks[0]) taskSelect.value = String(emergencyTasks[0].id);
+    if(!contactSelect.value && contacts[0]) contactSelect.value = contacts[0].id;
+    updateEmergencyPreview();
   }
 
   const verMaisBtn = document.getElementById('ver-mais-btn');
@@ -144,10 +281,17 @@
 
   // ---------- MODAL: EMERGÊNCIA ----------
   const overlayEmg = document.getElementById('overlay-emergency');
-  function openEmergency(){ overlayEmg.classList.add('open'); }
+  function openEmergency(){
+    fillEmergencyDemoData();
+    if(overlayEmg) overlayEmg.classList.add('open');
+  }
   if(overlayEmg){
-    const emergencyButtons = ['btn-emergency', 'btn-emergency-2'];
-    emergencyButtons.forEach((buttonId)=>{
+    const emergencyButtons = document.querySelectorAll('.fab-emergency');
+    emergencyButtons.forEach((button)=>{
+      button.addEventListener('click', openEmergency);
+    });
+    const emergencyIds = ['btn-emergency', 'btn-emergency-2'];
+    emergencyIds.forEach((buttonId)=>{
       const button = document.getElementById(buttonId);
       if(button) button.addEventListener('click', openEmergency);
     });
@@ -160,6 +304,33 @@
         alert('Em um app completo, isso ligaria diretamente para o seu contato de confiança salvo.');
       });
     }
+
+    const taskSelect = document.getElementById('emg-task-select');
+    const contactSelect = document.getElementById('emg-contact-select');
+    const confirmOpen = document.getElementById('emg-open-confirm');
+    const cancelConfirm = document.getElementById('emg-cancel-confirm');
+    const confirmSend = document.getElementById('emg-confirm-send');
+    const overlayConfirm = document.getElementById('overlay-emergency-confirm');
+
+    if(taskSelect) taskSelect.addEventListener('change', updateEmergencyPreview);
+    if(contactSelect) contactSelect.addEventListener('change', updateEmergencyPreview);
+
+    if(confirmOpen && overlayConfirm){
+      confirmOpen.addEventListener('click', ()=>{
+        updateEmergencyPreview();
+        overlayConfirm.classList.add('open');
+      });
+    }
+
+    if(cancelConfirm && overlayConfirm) cancelConfirm.addEventListener('click', ()=> overlayConfirm.classList.remove('open'));
+    if(confirmSend && overlayConfirm){
+      confirmSend.addEventListener('click', ()=>{
+        overlayConfirm.classList.remove('open');
+        overlayEmg.classList.remove('open');
+        alert('Mensagem de demonstração pronta para envio.');
+      });
+    }
+    if(overlayConfirm) overlayConfirm.addEventListener('click', (e)=>{ if(e.target === overlayConfirm) overlayConfirm.classList.remove('open'); });
   }
 
   // ---------- CALENDÁRIO ----------
@@ -187,8 +358,9 @@
       cell.className = 'cal-day';
       if(iso === todayISO()) cell.classList.add('today');
       if(iso === selectedDay && iso !== todayISO()) cell.classList.add('selected');
-      const cats = [...new Set((tasksByDate[iso]||[]).map(t=>t.category))];
-      cell.innerHTML = `<span>${d}</span><div class="cal-dots">${cats.map(c=>`<span style="background:var(--${c})"></span>`).join('')}</div>`;
+      const dayTasks = tasksByDate[iso] || [];
+      const dotCategories = getDayDotCategories(dayTasks);
+      cell.innerHTML = `<span>${d}</span><div class="cal-dots">${dotCategories.map(c=>`<span style="background:var(--${c})"></span>`).join('')}</div>`;
       cell.addEventListener('click', ()=>{ selectedDay = iso; renderCalendar(); renderDayDetail(iso); });
       grid.appendChild(cell);
     }
@@ -206,11 +378,13 @@
     dayTasks.forEach(t=>{
       const card = document.createElement('div');
       card.className = `task-card ${t.category}`;
+      card.style.cursor = 'pointer';
       card.innerHTML = `
         <div class="task-time"><span class="day">${t.time.split(':')[0]}h</span><span>${t.time.split(':')[1]}</span></div>
         <div class="task-info"><h3>${t.title}</h3><p>${t.place || ''}</p></div>
         <span class="badge ${t.category}">${CATEGORY_LABEL[t.category]}</span>
       `;
+      card.addEventListener('click', ()=> openTaskDetail(t));
       list.appendChild(card);
     });
   }
