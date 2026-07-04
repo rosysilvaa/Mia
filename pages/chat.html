@@ -7,6 +7,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+
+<style>
+  .chat-body { padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; height: calc(100vh - 200px); }
+  .message { padding: 10px 14px; border-radius: 16px; max-width: 75%; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 14px; line-height: 1.4; }
+  .user-msg { background-color: #007aff; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .mia-msg { background-color: #f1f1f4; color: #1c1c1e; align-self: flex-start; border-bottom-left-radius: 4px; }
+  .typing-indicator { font-style: italic; color: #8e8e93; font-size: 12px; align-self: flex-start; margin-left: 5px; }
+</style>
 </head>
 <body>
 
@@ -35,7 +43,6 @@
     </div>
   </div>
 
-  <!-- Tab bar -->
   <nav class="tabbar">
     <a class="tab-btn" href="index.html">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
@@ -52,7 +59,84 @@
   </nav>
 </div>
 
-<script src="js/data.js"></script>
-<script src="js/chat.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const chatBody = document.getElementById("chat-body");
+    const chatInput = document.getElementById("chat-input");
+    const chatSend = document.getElementById("chat-send");
+
+    // Banco de respostas da MIA baseado em palavras-chave
+    const respostasMia = {
+      "oi": "Olá! Que bom te ver por aqui. Como você está se sentindo hoje?",
+      "olá": "Oi! Sempre um prazer conversar com você. Do que você precisa hoje?",
+      "bom dia": "Bom dia! Espero que seu dia seja leve. Como posso te ajudar?",
+      "boa tarde": "Boa tarde! Como está sendo o seu dia até agora?",
+      "boa noite": "Boa noite. Como foi o seu dia? Estou aqui para ouvir.",
+      "triste": "Sinto muito que esteja se sentindo assim. Quer desabafar sobre o que aconteceu? Estou te ouvindo.",
+      "ansioso": "Respire fundo... vai dar tudo certo. Quer que eu te ajude a organizar as tarefas do dia para aliviar a mente?",
+      "agenda": "Você pode checar seus compromissos clicando na aba 'Agenda' ali embaixo!",
+      "obrigado": "Imagina! Estou aqui para isso. Se precisar de mais algo, só chamar. 🤍",
+      "padrão": "Entendi. Me conta mais sobre isso? Estou aqui para te apoiar no que precisar."
+    };
+
+    // Mensagem de boas-vindas da MIA ao carregar a página
+    setTimeout(() => {
+      adicionarMensagem("Oi! Eu sou a MIA. Como está seu dia? Pode desabafar ou me pedir ajuda com a rotina.", "mia");
+    }, 600);
+
+    // Função para renderizar as mensagens na tela
+    function adicionarMensagem(texto, remetente) {
+      const msgDiv = document.createElement("div");
+      msgDiv.classList.add("message", remetente === "user" ? "user-msg" : "mia-msg");
+      msgDiv.innerText = texto;
+      chatBody.appendChild(msgDiv);
+      chatBody.scrollTop = chatBody.scrollHeight; // Rola o chat para baixo
+    }
+
+    // Função que processa a resposta da MIA
+    function lógicaRespostaMia(mensagemUsuario) {
+      const textoLimpo = mensagemUsuario.toLowerCase().trim();
+      let resposta = respostasMia["padrão"];
+
+      // Procura por palavras-chave na frase do usuário
+      for (let chave in respostasMia) {
+        if (textoLimpo.includes(chave) && chave !== "padrão") {
+          resposta = respostasMia[chave];
+          break;
+        }
+      }
+
+      // Cria o efeito de "MIA está digitando..."
+      const indicadorDigitando = document.createElement("div");
+      indicadorDigitando.classList.add("typing-indicator");
+      indicadorDigitando.innerText = "MIA está digitando...";
+      chatBody.appendChild(indicadorDigitando);
+      chatBody.scrollTop = chatBody.scrollHeight;
+
+      setTimeout(() => {
+        indicadorDigitando.remove();
+        adicionarMensagem(resposta, "mia");
+      }, 1200); // 1.2 segundos de delay para parecer real
+    }
+
+    // Evento de enviar mensagem ao clicar no botão
+    chatSend.addEventListener("click", () => {
+      const texto = chatInput.value.trim();
+      if (texto !== "") {
+        adicionarMensagem(texto, "user");
+        chatInput.value = ""; // Limpa o input
+        lógicaRespostaMia(texto);
+      }
+    });
+
+    // Evento de enviar ao apertar a tecla "Enter"
+    chatInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        chatSend.click();
+      }
+    });
+  });
+</script>
+
 </body>
 </html>
