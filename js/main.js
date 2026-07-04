@@ -3,6 +3,22 @@
   const CATEGORY_LABEL = { eu:'Eu', familia:'Família', trabalho:'Trabalho' };
   const STORAGE_KEY = 'mia.tasks';
   const CHAT_PENDING_KEY = 'mia.pendingChatMessage';
+  const EMERGENCY_DRAFT_KEY = 'mia.emergencyDraft';
+  const EMERGENCY_TASK_KEY = 'mia.emergencyTaskId';
+  const EMERGENCY_CONTACT_KEY = 'mia.emergencyContactId';
+  const EMERGENCY_CONTACT_LABEL = {
+    eu: 'Contato pessoal de confiança',
+    familia: 'Marido ou familiar de apoio',
+    trabalho: 'Gerente ou sócio',
+    default: 'Contato de confiança'
+  };
+  const EMERGENCY_CONTACTS = [
+    { id:'marido', label:'Marido', hint:'Apoio pessoal' },
+    { id:'mae', label:'Mãe', hint:'Apoio familiar' },
+    { id:'amiga', label:'Amiga', hint:'Pessoa de confiança' },
+    { id:'gerente', label:'Gerente', hint:'Contato do trabalho' },
+    { id:'socio', label:'Sócio', hint:'Contato do trabalho' },
+  ];
   const todayISO = () => new Date().toISOString().slice(0,10);
 
   const toISO = (d) => {
@@ -41,6 +57,9 @@
   let selectedCat = 'eu';
   let calCursor = new Date();
   let selectedDay = todayISO();
+  let emergencyDraft = null;
+  let selectedEmergencyTaskId = null;
+  let selectedEmergencyContactId = null;
 
   // ---------- DATA NO HEADER ----------
   const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
@@ -56,6 +75,141 @@
     const [y,m,d] = iso.split('-').map(Number);
     const dt = new Date(y, m-1, d);
     return { num: d, mes: meses[m-1].slice(0,3) };
+  }
+
+  function formatLongDate(iso){
+    const [y,m,d] = iso.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    return `${d} de ${meses[dt.getMonth()]}`;
+  }
+
+  function getEmergencyContextLabel(task){
+    if(!task) return 'compromisso pessoal';
+    if(task.category === 'trabalho') return 'compromisso de trabalho';
+    if(task.category === 'familia') return 'compromisso familiar';
+    return 'compromisso pessoal';
+  }
+
+  function getEmergencyContactLabel(task){
+    return EMERGENCY_CONTACT_LABEL[task?.category] || EMERGENCY_CONTACT_LABEL.default;
+  }
+
+  function getPreferredEmergencyContact(task){
+    if(task?.category === 'trabalho') return 'gerente';
+    if(task?.category === 'familia') return 'mae';
+    return 'amiga';
+  }
+
+  function findEmergencyTask(taskId){
+    return sortedTasks().find((task)=> String(task.id) === String(taskId)) || null;
+  }
+
+  function findEmergencyContact(contactId){
+    return EMERGENCY_CONTACTS.find((contact)=> contact.id === contactId) || EMERGENCY_CONTACTS[0];
+  }
+
+  function getUpcomingEmergencyTask(){
+    const upcoming = sortedTasks().filter((task)=>{
+      const taskDate = new Date(`${task.date}T${task.time}:00`);
+      return Number.isFinite(taskDate.getTime()) && taskDate >= new Date();
+    });
+    return upcoming[0] || sortedTasks()[0] || null;
+  }
+
+  function buildEmergencyDraft(task, contact){
+    const safeTask = task || { title:'Compromisso próximo', category:'eu', date:todayISO(), time:'09:00', place:'' };
+    const safeContact = contact || findEmergencyContact(getPreferredEmergencyContact(safeTask));
+    const contactLabel = safeContact.label;
+    const contextLabel = getEmergencyContextLabel(safeTask);
+    const locationLabel = safeTask.place ? safeTask.place : 'Localização pessoal não informada';
+    const message = [
+      `Oi, ${contactLabel}.`,
+      '',
+      'A MIA identificou um compromisso próximo e pode ser importante você ficar por perto.',
+      '',
+      `Compromisso: ${safeTask.title}`,
+      `Contexto: ${contextLabel}`,
+      `Horário: ${formatLongDate(safeTask.date)} às ${safeTask.time}`,
+      `Localização pessoal: ${locationLabel}`,
+      '',
+      'Se puder, assuma a frente e ofereça apoio quando necessário.'
+    ].join('\n');
+
+    return {
+      task: safeTask,
+      contactLabel,
+      contactId: safeContact.id,
+      contextLabel,
+      locationLabel,
+      message,
+    };
+  }
+
+  function resetEmergencyModal(){
+    const confirmOverlay = document.getElementById('overlay-emergency-confirm');
+    if(confirmOverlay) confirmOverlay.classList.remove('open');
+  }
+
+  function renderEmergencySelectors(task, contact){
+    const taskSelect = document.getElementById('emg-task-select');
+    const contactSelect = document.getElementById('emg-contact-select');
+    if(taskSelect && !taskSelect.dataset.ready){
+      taskSelect.innerHTML = sortedTasks().map((item)=>{
+        const dateLabel = formatLongDate(item.date);
+        return `<option value="${item.id}">${item.title} · ${dateLabel} às ${item.time}</option>`;
+      }).join('');
+      taskSelect.dataset.ready = 'true';
+    }
+    if(contactSelect && !contactSelect.dataset.ready){
+      contactSelect.innerHTML = EMERGENCY_CONTACTS.map((item)=> `<option value="${item.id}">${item.label} · ${item.hint}</option>`).join('');
+      contactSelect.dataset.ready = 'true';
+    }
+    if(taskSelect && task) taskSelect.value = String(task.id);
+    if(contactSelect && contact) contactSelect.value = contact.id;
+  }
+
+  function renderEmergencyModal(){
+    const title = document.getElementById('emg-task-title');
+    const meta = document.getElementById('emg-task-meta');
+    const contact = document.getElementById('emg-suggested-contact');
+    const intro = document.getElementById('emg-intro');
+    const preview = document.getElementById('emg-message-preview');
+    const taskSelect = document.getElementById('emg-task-select');
+    const contactSelect = document.getElementById('emg-contact-select');
+    const task = findEmergencyTask(selectedEmergencyTaskId) || getUpcomingEmergencyTask();
+    const contactChoice = findEmergencyContact(selectedEmergencyContactId) || findEmergencyContact(getPreferredEmergencyContact(task));
+    emergencyDraft = buildEmergencyDraft(task, contactChoice);
+    selectedEmergencyTaskId = emergencyDraft.task.id;
+    selectedEmergencyContactId = emergencyDraft.contactId;
+
+    if(title) title.textContent = emergencyDraft.task.title;
+    if(meta) meta.textContent = `${formatLongDate(emergencyDraft.task.date)} · ${emergencyDraft.task.time} · ${emergencyDraft.contextLabel}`;
+    if(contact) contact.textContent = emergencyDraft.contactLabel;
+    if(intro) intro.textContent = 'A MIA já deixou uma mensagem pronta com o contexto do compromisso, a localização pessoal e o contato sugerido. Você só revisa e confirma o envio.';
+    if(preview) preview.textContent = emergencyDraft.message;
+
+    renderEmergencySelectors(emergencyDraft.task, contactChoice);
+    if(taskSelect && !taskSelect.dataset.bound){
+      taskSelect.addEventListener('change', ()=>{
+        selectedEmergencyTaskId = taskSelect.value;
+        const nextTask = findEmergencyTask(selectedEmergencyTaskId) || getUpcomingEmergencyTask();
+        selectedEmergencyContactId = getPreferredEmergencyContact(nextTask);
+        renderEmergencyModal();
+      });
+      taskSelect.dataset.bound = 'true';
+    }
+    if(contactSelect && !contactSelect.dataset.bound){
+      contactSelect.addEventListener('change', ()=>{
+        selectedEmergencyContactId = contactSelect.value;
+        renderEmergencyModal();
+      });
+      contactSelect.dataset.bound = 'true';
+    }
+
+    sessionStorage.setItem(EMERGENCY_DRAFT_KEY, JSON.stringify(emergencyDraft));
+    sessionStorage.setItem(EMERGENCY_TASK_KEY, String(selectedEmergencyTaskId));
+    sessionStorage.setItem(EMERGENCY_CONTACT_KEY, String(selectedEmergencyContactId));
+    resetEmergencyModal();
   }
 
   // ---------- TASK LIST (HOME) ----------
@@ -144,7 +298,13 @@
 
   // ---------- MODAL: EMERGÊNCIA ----------
   const overlayEmg = document.getElementById('overlay-emergency');
-  function openEmergency(){ overlayEmg.classList.add('open'); }
+  function openEmergency(){
+    if(!overlayEmg) return;
+    selectedEmergencyTaskId = sessionStorage.getItem(EMERGENCY_TASK_KEY) || null;
+    selectedEmergencyContactId = sessionStorage.getItem(EMERGENCY_CONTACT_KEY) || null;
+    renderEmergencyModal();
+    overlayEmg.classList.add('open');
+  }
   if(overlayEmg){
     const emergencyButtons = ['btn-emergency', 'btn-emergency-2'];
     emergencyButtons.forEach((buttonId)=>{
@@ -152,14 +312,29 @@
       if(button) button.addEventListener('click', openEmergency);
     });
     const closeEmergency = document.getElementById('close-emergency');
+    const openConfirmButton = document.getElementById('emg-open-confirm');
+    const confirmOverlay = document.getElementById('overlay-emergency-confirm');
+    const cancelConfirm = document.getElementById('emg-cancel-confirm');
+    const confirmSend = document.getElementById('emg-confirm-send');
+
     if(closeEmergency) closeEmergency.addEventListener('click', ()=> overlayEmg.classList.remove('open'));
-    overlayEmg.addEventListener('click', (e)=>{ if(e.target === overlayEmg) overlayEmg.classList.remove('open'); });
-    const emgContact = document.getElementById('emg-contact');
-    if(emgContact){
-      emgContact.addEventListener('click', ()=>{
-        alert('Em um app completo, isso ligaria diretamente para o seu contato de confiança salvo.');
+    if(openConfirmButton && confirmOverlay){
+      openConfirmButton.addEventListener('click', ()=> confirmOverlay.classList.add('open'));
+    }
+    if(cancelConfirm && confirmOverlay){
+      cancelConfirm.addEventListener('click', ()=> confirmOverlay.classList.remove('open'));
+    }
+    if(confirmSend){
+      confirmSend.addEventListener('click', ()=>{
+        if(!emergencyDraft) return;
+        sessionStorage.setItem(EMERGENCY_DRAFT_KEY, JSON.stringify(emergencyDraft));
+        overlayEmg.classList.remove('open');
+        if(confirmOverlay) confirmOverlay.classList.remove('open');
+        alert(`Mensagem enviada para ${emergencyDraft.contactLabel}.`);
       });
     }
+    overlayEmg.addEventListener('click', (e)=>{ if(e.target === overlayEmg) overlayEmg.classList.remove('open'); });
+    if(confirmOverlay) confirmOverlay.addEventListener('click', (e)=>{ if(e.target === confirmOverlay) confirmOverlay.classList.remove('open'); });
   }
 
   // ---------- CALENDÁRIO ----------
