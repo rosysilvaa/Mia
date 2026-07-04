@@ -1,10 +1,6 @@
-Aqui está um modelo completo e bem estruturado de `README.md` para o seu projeto. Ele foi pensado para destacar o propósito do aplicativo **Mia** e organizar as tecnologias utilizadas de forma clara e profissional.
 
-Você pode copiar o código abaixo e substituir os links e informações que estão entre colchetes (como `[seu-usuario]`) pelos dados reais do seu repositório.
 
----
 
-```markdown
 # 👶 Mia — Conectando e Auxiliando Mães na Maternidade
 
 O **Mia** é um aplicativo web desenvolvido para ser um braço direito das mães durante a jornada da maternidade. O objetivo principal do projeto é oferecer suporte, organização e informações úteis para facilitar o dia a dia com os filhos, unindo um design acolhedor a uma interface intuitiva.
