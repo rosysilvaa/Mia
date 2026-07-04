@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Colo — Agenda</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght=0,9..144,400;0,9..144,600;1,9..144,500;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -48,7 +48,6 @@
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
   </button>
 
-  <!-- Tab bar -->
   <nav class="tabbar">
     <a class="tab-btn" href="index.html">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
@@ -64,7 +63,6 @@
     </a>
   </nav>
 
-  <!-- Modal: emergência -->
   <div class="overlay" id="overlay-emergency">
     <div class="sheet">
       <h3>Você não está sozinha</h3>
@@ -96,6 +94,70 @@
         </div>
       </div>
       <button class="btn-ghost" id="close-emergency" style="width:100%; margin-top:4px;">Fechar</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-detail">
+    <div class="sheet" style="max-height: 85%; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+        <div>
+          <span id="detail-badge" class="badge">Categoria</span>
+          <h3 id="detail-title" style="margin-top: 8px; margin-bottom: 4px;">Título da Tarefa</h3>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <button class="icon-btn-action" id="btn-edit-task" title="Editar tarefa">✏️</button>
+          <button class="icon-btn-action" id="btn-delete-task" title="Excluir tarefa" style="background: var(--alerta-tint); color: var(--alerta);">🗑️</button>
+        </div>
+      </div>
+
+      <div id="detail-view-mode">
+        <div style="display: flex; gap: 16px; margin-bottom: 16px; font-size: 13px; color: var(--ink-soft);">
+          <div>📅 <span id="detail-date">00/00/0000</span></div>
+          <div>⏰ <span id="detail-time">00:00</span></div>
+          <div id="detail-place-wrapper">📍 <span id="detail-place">Local</span></div>
+        </div>
+
+        <div class="ia-suggestion-card">
+          <div class="ia-title">✨ Sugestão da MIA</div>
+          <p id="detail-ia-text">Analisando sua rotina para gerar sugestões de bem-estar...</p>
+        </div>
+
+        <div class="field" style="margin-top: 16px;">
+          <label>👥 SE ESTIVER SOBRECARREGADA, DELEQUE:</label>
+          <select id="detail-delegate-select">
+            <option value="">Ninguém (Eu assumo essa tarefa)</option>
+            <option value="Rede de Apoio: Avó">Vovó (Cuidar das crianças/casa)</option>
+            <option value="Amiga de Confiança">Mariana (Amiga de Apoio)</option>
+            <option value="Vizinha Solidária">Dona Sônia (Vizinha)</option>
+            <option value="Banco de Voluntários">Voluntário do projeto Colo</option>
+          </select>
+          <p id="delegated-status-text" style="font-size: 11px; color: var(--trabalho); margin-top: 4px; font-weight: 600; display:none;"></p>
+        </div>
+      </div>
+
+      <div id="detail-edit-mode" style="display: none;">
+        <div class="field">
+          <label>Título da Tarefa</label>
+          <input type="text" id="edit-title">
+        </div>
+        <div class="field">
+          <label>Data</label>
+          <input type="date" id="edit-date">
+        </div>
+        <div class="field">
+          <label>Horário</label>
+          <input type="time" id="edit-time">
+        </div>
+        <div class="field">
+          <label>Local</label>
+          <input type="text" id="edit-place">
+        </div>
+      </div>
+
+      <div class="sheet-actions" style="margin-top: 18px;">
+        <button class="btn-ghost" id="close-detail">Fechar</button>
+        <button class="btn-primary" id="save-detail-changes" style="display: none;">Salvar Alterações</button>
+      </div>
     </div>
   </div>
 
