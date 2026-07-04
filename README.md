@@ -74,7 +74,7 @@ mia-app/
 
 ## ✒️ Autores
 
-* **Seu Nome** - *Desenvolvimento Geral* - [@seu-usuario](https://www.google.com/search?q=https://github.com/seu-usuario)
+* **Seu Nome** - *Desenvolvimento Geral* - [@rose.mentoring](https://www.google.com/search?q=https://github.com/seu-usuario)
 
 ---
 
