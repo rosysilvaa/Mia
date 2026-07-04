@@ -256,12 +256,15 @@
 
   // ---------- MODAL: NOVA TAREFA ----------
   const overlayAdd = document.getElementById('overlay-add');
-  const addTaskBtn = document.getElementById('btn-add-task');
-  if(overlayAdd && addTaskBtn){
-    addTaskBtn.addEventListener('click', ()=>{
+  const addTaskButtons = ['btn-add-task', 'btn-add-task-inline'];
+  if(overlayAdd){
+    addTaskButtons.forEach((buttonId)=>{
+      const button = document.getElementById(buttonId);
+      if(button) button.addEventListener('click', ()=>{
       const newDate = document.getElementById('new-date');
       if(newDate) newDate.value = todayISO();
       overlayAdd.classList.add('open');
+      });
     });
     const cancelAdd = document.getElementById('cancel-add');
     if(cancelAdd) cancelAdd.addEventListener('click', ()=> overlayAdd.classList.remove('open'));
