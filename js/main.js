@@ -102,9 +102,9 @@
 
   // ---------- MODAL: NOVA TAREFA ----------
   const overlayAdd = document.getElementById('overlay-add');
-  const addTaskBtn = document.getElementById('btn-add-task');
-  if(overlayAdd && addTaskBtn){
-    addTaskBtn.addEventListener('click', ()=>{
+  const addTaskBtnInline = document.getElementById('btn-add-task-inline');
+  if(overlayAdd && addTaskBtnInline){
+    addTaskBtnInline.addEventListener('click', ()=>{
       const newDate = document.getElementById('new-date');
       if(newDate) newDate.value = todayISO();
       overlayAdd.classList.add('open');
@@ -214,6 +214,12 @@
       list.appendChild(card);
     });
   }
+
+  // ---------- INICIALIZAÇÃO ----------
+  renderTodayPill();
+  renderTaskList();
+  renderCalendar();
+  renderDayDetail(selectedDay);
 
 // Função para salvar a delegação de tarefas de forma dinâmica
 window.saveDelegation = function(id, iso) {
