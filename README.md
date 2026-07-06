@@ -28,33 +28,18 @@ O projeto foi construído utilizando as tecnologias fundamentais da web para gar
 
 ## 📸 Demonstração
 
-<img width="1920" height="1080" alt="Screenshot 2026-07-04 131427" src="https://github.com/user-attachments/assets/75248865-4833-478b-a3e8-ad146bf1bf01" />
+<img width="1366" height="768" alt="Captura de tela 2026-07-05 210450" src="https://github.com/user-attachments/assets/1aee652f-a1fc-4fc8-b105-d3634464a7e4" />
 
+<img width="1366" height="768" alt="Captura de tela 2026-07-05 210506" src="https://github.com/user-attachments/assets/c9e04322-cea3-4213-abd5-428c7f72e851" />
 
-## 📦 Como Executar o Projeto
+<img width="1366" height="768" alt="Captura de tela 2026-07-05 210517" src="https://github.com/user-attachments/assets/e0fc8ea9-10ce-42c5-b042-131d7f48dd73" />
 
-Para visualizar o aplicativo localmente na sua máquina, você não precisa instalar nenhuma dependência pesada. Basta seguir os passos abaixo:
+<img width="1366" height="768" alt="Captura de tela 2026-07-05 210531" src="https://github.com/user-attachments/assets/d654e8d0-2be4-4a84-ad2e-4a91e920b4c6" />
 
-1. **Clone este repositório:**
-   ```bash
-   git clone [https://github.com/seu-usuario/mia-app.git](https://github.com/seu-usuario/mia-app.git)
+<img width="1366" height="768" alt="Captura de tela 2026-07-05 210619" src="https://github.com/user-attachments/assets/f62ee687-0209-4263-bfad-c21d62a7ef11" />
 
-```
+<img width="1366" height="768" alt="Captura de tela 2026-07-05 210627" src="https://github.com/user-attachments/assets/8dd9799e-8eef-47fa-802c-5e7eed202de7" />
 
-2. **Navegue até a pasta do projeto:**
-```bash
-cd mia-app
-
-```
-
-
-3. **Abra o arquivo principal:**
-* Basta dar um duplo clique no arquivo `index.html` ou abri-lo diretamente no seu navegador de preferência.
-* *Dica:* Se usar o VS Code, você pode utilizar a extensão **Live Server** para rodar o projeto localmente com atualização em tempo real.
-
-
-
----
 
 ## 📁 Estrutura de Pastas
 
@@ -78,20 +63,3 @@ mia-app/
 
 ---
 
-## 📄 Licença
-
-Este projeto está sob a licença MIT — consulte o arquivo [LICENSE](https://www.google.com/search?q=LICENSE) para mais detalhes.
-
----
-
-💝 *Desenvolvido com carinho para apoiar quem mais cuida.*
-
-```
-
----
-
-### 💡 Dicas para personalizar:
-* **Seção de Funcionalidades:** Mude a lista para refletir exatamente o que o seu aplicativo **Mia** já faz (ex: se tem calculadora de vacinas, diário, etc.).
-* **Imagens:** Colocar um GIF ou imagem do app logo no começo chama muito a atenção de quem visita o seu GitHub (recrutadores adoram ver o projeto funcionando de cara!).
-
-```
