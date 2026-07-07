@@ -19,6 +19,10 @@
     { id:4, title:'Aniversário da tia Rosa', category:'familia', date:addDays(4), time:'19:00', place:'Casa da tia Rosa' },
     { id:5, title:'Entrega do relatório mensal', category:'trabalho', date:addDays(5), time:'18:00', place:'Online' },
     { id:6, title:'Ioga — 30 minutos pra mim', category:'eu', date:addDays(6), time:'07:00', place:'Em casa' },
+    { id:7, title:'Academia / Treino rápido', category:'eu', date:todayISO(), time:'18:30', place:'Academia' },
+    { id:8, title:'Comprar presente para tia Rosa', category:'familia', date:addDays(1), time:'10:00', place:'Shopping' },
+    { id:9, title:'Dentista', category:'eu', date:addDays(3), time:'09:00', place:'Odontoclin' },
+    { id:10, title:'Reunião de alinhamento', category:'trabalho', date:addDays(3), time:'15:00', place:'Zoom' }
   ];
   function loadTasks(){
     try{
@@ -66,8 +70,8 @@
   function getDayDotCategories(dayTasks){
     if(!dayTasks || !dayTasks.length) return [];
     if(dayTasks.length === 1) return [dayTasks[0].category];
-    const firstTwo = dayTasks.slice(0, 2).map((task)=> task.category);
-    return firstTwo.length === 1 ? [firstTwo[0], firstTwo[0]] : firstTwo;
+    // Se houver duas ou mais tarefas, retorna as categorias das duas primeiras
+    return [dayTasks[0].category, dayTasks[1].category];
   }
 
   function openTaskDetail(task){
@@ -100,10 +104,123 @@
           ? 'MIA diz: Compromissos com a família costumam pesar mais na rotina. Se precisar, peça ajuda sem culpa.'
           : 'MIA diz: Esse é o seu momento. Tente preservar esse compromisso como um cuidado com você.';
     }
-    if(detailDelegate) detailDelegate.value = '';
-    if(delegatedStatusText){
-      delegatedStatusText.style.display = 'none';
-      delegatedStatusText.textContent = '';
+
+    // Reset view/edit modes
+    const viewMode = document.getElementById('detail-view-mode');
+    const editMode = document.getElementById('detail-edit-mode');
+    const btnSave = document.getElementById('save-detail-changes');
+    if(viewMode) viewMode.style.display = 'block';
+    if(editMode) editMode.style.display = 'none';
+    if(btnSave) btnSave.style.display = 'none';
+
+    // Setup Delegation
+    if(detailDelegate){
+      const newDelegate = detailDelegate.cloneNode(true);
+      detailDelegate.parentNode.replaceChild(newDelegate, detailDelegate);
+      
+      if(task.delegatedTo){
+        newDelegate.value = task.delegatedTo;
+        if(delegatedStatusText){
+          delegatedStatusText.style.display = 'block';
+          delegatedStatusText.textContent = `Tarefa delegada para: ${task.delegatedTo}`;
+        }
+      } else {
+        newDelegate.value = '';
+        if(delegatedStatusText) delegatedStatusText.style.display = 'none';
+      }
+
+      newDelegate.addEventListener('change', ()=>{
+        task.delegatedTo = newDelegate.value || null;
+        saveTasks();
+        if(task.delegatedTo){
+          if(delegatedStatusText){
+            delegatedStatusText.style.display = 'block';
+            delegatedStatusText.textContent = `Tarefa delegada para: ${task.delegatedTo}`;
+          }
+        } else {
+          if(delegatedStatusText) delegatedStatusText.style.display = 'none';
+        }
+        renderTaskList();
+        renderCalendar();
+        renderDayDetail(selectedDay);
+      });
+    } else {
+      if(delegatedStatusText) delegatedStatusText.style.display = 'none';
+    }
+
+    // Setup Delete Button
+    const btnDelete = document.getElementById('btn-delete-task');
+    if(btnDelete){
+      const newBtnDelete = btnDelete.cloneNode(true);
+      btnDelete.parentNode.replaceChild(newBtnDelete, btnDelete);
+      newBtnDelete.addEventListener('click', ()=>{
+        if(confirm("Tem certeza que deseja excluir esta tarefa?")){
+          tasks = tasks.filter(t => t.id !== task.id);
+          saveTasks();
+          overlayDetail.classList.remove('open');
+          renderTaskList();
+          renderCalendar();
+          renderDayDetail(selectedDay);
+        }
+      });
+    }
+
+    // Setup Edit and Save Button
+    const btnEdit = document.getElementById('btn-edit-task');
+    if(btnEdit){
+      const newBtnEdit = btnEdit.cloneNode(true);
+      btnEdit.parentNode.replaceChild(newBtnEdit, btnEdit);
+      newBtnEdit.addEventListener('click', ()=>{
+        if(viewMode && editMode && btnSave){
+          const isEditing = editMode.style.display === 'block';
+          if(isEditing){
+            editMode.style.display = 'none';
+            viewMode.style.display = 'block';
+            btnSave.style.display = 'none';
+          } else {
+            document.getElementById('edit-title').value = task.title;
+            document.getElementById('edit-date').value = task.date;
+            document.getElementById('edit-time').value = task.time;
+            document.getElementById('edit-place').value = task.place || '';
+            
+            editMode.style.display = 'block';
+            viewMode.style.display = 'none';
+            btnSave.style.display = 'block';
+          }
+        }
+      });
+    }
+
+    if(btnSave){
+      const newBtnSave = btnSave.cloneNode(true);
+      btnSave.parentNode.replaceChild(newBtnSave, btnSave);
+      newBtnSave.addEventListener('click', ()=>{
+        const editTitle = document.getElementById('edit-title');
+        const editDate = document.getElementById('edit-date');
+        const editTime = document.getElementById('edit-time');
+        const editPlace = document.getElementById('edit-place');
+
+        const newTitle = editTitle ? editTitle.value.trim() : '';
+        const newDate = editDate ? editDate.value : '';
+        const newTime = editTime ? editTime.value : '';
+        const newPlace = editPlace ? editPlace.value.trim() : '';
+
+        if(!newTitle){
+          alert("O título não pode ficar em branco.");
+          return;
+        }
+
+        task.title = newTitle;
+        if(newDate) task.date = newDate;
+        if(newTime) task.time = newTime;
+        task.place = newPlace;
+
+        saveTasks();
+        overlayDetail.classList.remove('open');
+        renderTaskList();
+        renderCalendar();
+        renderDayDetail(selectedDay);
+      });
     }
 
     overlayDetail.classList.add('open');
@@ -359,6 +476,7 @@
       if(iso === todayISO()) cell.classList.add('today');
       if(iso === selectedDay && iso !== todayISO()) cell.classList.add('selected');
       const dayTasks = tasksByDate[iso] || [];
+      if(dayTasks.length > 0) cell.classList.add('has-tasks');
       const dotCategories = getDayDotCategories(dayTasks);
       cell.innerHTML = `<span>${d}</span><div class="cal-dots">${dotCategories.map(c=>`<span style="background:var(--${c})"></span>`).join('')}</div>`;
       cell.addEventListener('click', ()=>{ selectedDay = iso; renderCalendar(); renderDayDetail(iso); });
@@ -395,6 +513,22 @@
   renderCalendar();
   renderDayDetail(selectedDay);
 
+  // ---------- NAVEGAÇÃO DO CALENDÁRIO ----------
+  const calPrev = document.getElementById('cal-prev');
+  const calNext = document.getElementById('cal-next');
+  if(calPrev){
+    calPrev.addEventListener('click', ()=>{
+      calCursor.setMonth(calCursor.getMonth() - 1);
+      renderCalendar();
+    });
+  }
+  if(calNext){
+    calNext.addEventListener('click', ()=>{
+      calCursor.setMonth(calCursor.getMonth() + 1);
+      renderCalendar();
+    });
+  }
+
 // Função para salvar a delegação de tarefas de forma dinâmica
 window.saveDelegation = function(id, iso) {
   const input = document.getElementById(`delegate-input-${id}`);
@@ -402,6 +536,7 @@ window.saveDelegation = function(id, iso) {
   const task = tasks.find(t => t.id === id);
   if (task) {
     task.delegatedTo = name || null; // Atualiza o responsável no array
+    saveTasks();
     renderCalendar();
     renderDayDetail(iso);
   }
@@ -411,6 +546,7 @@ window.saveDelegation = function(id, iso) {
 window.deleteTaskInline = function(id, iso) {
   if (confirm("Tem certeza que deseja apagar este compromisso?")) {
     tasks = tasks.filter(t => t.id !== id);
+    saveTasks();
     renderCalendar();
     renderDayDetail(iso);
   }
@@ -440,6 +576,7 @@ window.editTaskInline = function(id, iso) {
     task.time = novoHorario;
   }
 
+  saveTasks();
   renderCalendar();
   renderDayDetail(iso);
 };

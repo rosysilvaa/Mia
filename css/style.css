@@ -850,3 +850,4 @@ main::-webkit-scrollbar{width:0;}
 .btn-action-delete:hover {
   background:var(--eu-tint);
   color:var(--eu);
+}
