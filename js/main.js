@@ -3,6 +3,8 @@
   const CATEGORY_LABEL = { eu:'Eu', familia:'Família', trabalho:'Trabalho' };
   const STORAGE_KEY = 'mia.tasks';
   const CHAT_PENDING_KEY = 'mia.pendingChatMessage';
+  const AGENDA_PENDING_DATE_KEY = 'mia.pendingAgendaDate';
+  const AGENDA_PENDING_TASK_KEY = 'mia.pendingAgendaTask';
   const todayISO = () => new Date().toISOString().slice(0,10);
 
   const toISO = (d) => {
@@ -45,6 +47,289 @@
   let selectedCat = 'eu';
   let calCursor = new Date();
   let selectedDay = todayISO();
+
+  function getBasePath(){
+    return window.location.pathname.includes('/pages/') ? '' : 'pages/';
+  }
+
+  function buildSearchResponse(task){
+    const title = task && task.title ? task.title : 'compromisso';
+    const dateBR = task && task.date ? task.date.split('-').reverse().join('/') : 'a confirmar';
+    const time = task && task.time ? task.time : 'a confirmar';
+    const place = task && task.place ? task.place : 'a confirmar';
+    return `Olá, tudo bem? Juliana? Vou te enviar os detalhes da sua ${title.toLowerCase()}, local ${place}, dia ${dateBR} e horário ${time} e o nome do doutor.`;
+  }
+
+  function openAgendaForTask(task){
+    if(!task) return;
+    localStorage.setItem(AGENDA_PENDING_DATE_KEY, task.date);
+    localStorage.setItem(AGENDA_PENDING_TASK_KEY, task.title);
+    localStorage.setItem(CHAT_PENDING_KEY, buildSearchResponse(task));
+    window.location.href = `${getBasePath()}agenda.html`;
+  }
+
+  // ---------- INTERPRETADOR DE LINGUAGEM NATURAL (BARRA DE PESQUISA -> TAREFA) ----------
+  // Reconhece comandos como "Agende uma reunião para amanhã às 14h.",
+  // "Marcar consulta médica na sexta às 9h." ou "Adicionar aniversário da Maria dia 15 às 19h."
+  // e transforma automaticamente em um novo compromisso na Agenda.
+
+  // Observação: usamos (?<!\p{L}) / (?!\p{L}) em vez de \b, porque \b (baseado em
+  // [A-Za-z0-9_]) não reconhece corretamente limites de palavra em torno de letras
+  // acentuadas do português (ã, à, á, ç...), o que faria palavras como "amanhã" ou "às"
+  // não serem detectadas corretamente.
+  const TRIGGER_VERB_REGEX = /(?<!\p{L})(agendar|agende|agenda|marcar|marca|marque|adicionar|adicione|criar|crie|cadastrar|cadastre|lembrar|lembre|colocar|coloque|incluir|inclua|anotar|anote|anota|salvar|salve|salva)(?!\p{L})/iu;
+
+  const WEEKDAY_PATTERNS = [
+    { index:0, regex:/(?<!\p{L})domingo(?!\p{L})/iu },
+    { index:1, regex:/(?<!\p{L})segunda(-feira)?(?!\p{L})/iu },
+    { index:2, regex:/(?<!\p{L})ter[cç]a(-feira)?(?!\p{L})/iu },
+    { index:3, regex:/(?<!\p{L})quarta(-feira)?(?!\p{L})/iu },
+    { index:4, regex:/(?<!\p{L})quinta(-feira)?(?!\p{L})/iu },
+    { index:5, regex:/(?<!\p{L})sexta(-feira)?(?!\p{L})/iu },
+    { index:6, regex:/(?<!\p{L})s[aá]bado(?!\p{L})/iu }
+  ];
+
+  function escapeRegExp(str){
+    return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function normalizeAccents(str){
+    return String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function nextDateForWeekday(targetDow){
+    const d = new Date();
+    const diff = (targetDow - d.getDay() + 7) % 7;
+    d.setDate(d.getDate() + diff);
+    return toISO(d);
+  }
+
+  function extractDate(text){
+    let m = text.match(/(?<!\p{L})hoje(?!\p{L})/iu);
+    if(m) return { iso: todayISO(), match: m[0] };
+
+    m = text.match(/(?<!\p{L})depois de amanh[aã](?!\p{L})/iu);
+    if(m) return { iso: addDays(2), match: m[0] };
+
+    m = text.match(/(?<!\p{L})amanh[aã](?!\p{L})/iu);
+    if(m) return { iso: addDays(1), match: m[0] };
+
+    m = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+    if(m){
+      const day = parseInt(m[1], 10);
+      const month = parseInt(m[2], 10) - 1;
+      let year = m[3] ? parseInt(m[3], 10) : new Date().getFullYear();
+      if(year < 100) year += 2000;
+      return { iso: toISO(new Date(year, month, day)), match: m[0] };
+    }
+
+    m = text.match(/(?<!\p{L})dia\s+(\d{1,2})(?:\s+de\s+([a-zçàáâãéêíóôõú]+))?(?!\p{L})/iu);
+    if(m){
+      const day = parseInt(m[1], 10);
+      const now = new Date();
+      let month = now.getMonth();
+      const year = now.getFullYear();
+      if(m[2]){
+        const monthIdx = meses.findIndex((mm)=> mm.toLowerCase() === m[2].toLowerCase());
+        if(monthIdx >= 0) month = monthIdx;
+      }
+      let candidate = new Date(year, month, day);
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      if(!m[2] && candidate < startOfToday){
+        candidate = new Date(year, month + 1, day);
+      }
+      return { iso: toISO(candidate), match: m[0] };
+    }
+
+    for(const wp of WEEKDAY_PATTERNS){
+      const wm = text.match(wp.regex);
+      if(wm) return { iso: nextDateForWeekday(wp.index), match: wm[0] };
+    }
+
+    return null;
+  }
+
+  function extractTime(text){
+    let m = text.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/i);
+    if(m){
+      const hh = String(parseInt(m[1], 10)).padStart(2, '0');
+      return { time: `${hh}:${m[2]}`, match: m[0] };
+    }
+    m = text.match(/\b([01]?\d|2[0-3])\s*h\b/i);
+    if(m){
+      const hh = String(parseInt(m[1], 10)).padStart(2, '0');
+      return { time: `${hh}:00`, match: m[0] };
+    }
+    return null;
+  }
+
+  function removeMatchWithConnector(str, matchToken){
+    if(!matchToken) return str;
+    const escaped = escapeRegExp(matchToken);
+    const withConnector = new RegExp(`(?<!\\p{L})(para|em|no|na|dia|de|às|as)\\s+${escaped}`, 'iu');
+    if(withConnector.test(str)) return str.replace(withConnector, ' ');
+    return str.replace(new RegExp(escaped, 'i'), ' ');
+  }
+
+  function cleanupTitle(str){
+    let working = str.replace(/\s{2,}/g, ' ').trim();
+    let prevLength;
+    do{
+      prevLength = working.length;
+      working = working.replace(/^(uma|um|o|a|de|da|do|para|em|no|na|dia|às|as)\s+/i, '').trim();
+    } while(working.length !== prevLength && working.length > 0);
+    do{
+      prevLength = working.length;
+      working = working.replace(/\s+(para|em|no|na|de|às|as|dia)$/i, '').trim();
+      working = working.replace(/[.,;:!]+$/, '').trim();
+    } while(working.length !== prevLength && working.length > 0);
+    return working;
+  }
+
+  function guessCategory(text){
+    const t = normalizeAccents(text).toLowerCase();
+    if(/\b(reuniao|trabalho|relatorio|projeto|cliente|equipe|chefe|escritorio)\b/.test(t)) return 'trabalho';
+    if(/\b(aniversario|familia|escola|filho|filha|mae|pai|marido|esposa|avo|sobrinh\w*)\b/.test(t)) return 'familia';
+    return 'eu';
+  }
+
+  function parseTaskCommand(rawText){
+    const text = (rawText || '').trim();
+    if(!text) return null;
+
+    const hasTrigger = TRIGGER_VERB_REGEX.test(text);
+    const dateInfo = extractDate(text);
+    const timeInfo = extractTime(text);
+
+    // Só interpreta como criação de tarefa se houver um verbo de comando
+    // OU se data e horário estiverem presentes juntos (forte indício de agendamento).
+    if(!hasTrigger && !(dateInfo && timeInfo)) return null;
+
+    let working = text;
+    working = working.replace(TRIGGER_VERB_REGEX, ' ');
+    if(dateInfo) working = removeMatchWithConnector(working, dateInfo.match);
+    if(timeInfo) working = removeMatchWithConnector(working, timeInfo.match);
+
+    let title = cleanupTitle(working);
+    if(!title) title = 'Novo compromisso';
+    title = title.charAt(0).toUpperCase() + title.slice(1);
+
+    return {
+      title,
+      date: dateInfo ? dateInfo.iso : todayISO(),
+      time: timeInfo ? timeInfo.time : '09:00',
+      category: guessCategory(text)
+    };
+  }
+
+  function relativeDateLabel(iso){
+    if(iso === todayISO()) return 'hoje';
+    if(iso === addDays(1)) return 'amanhã';
+    const [y, m, d] = iso.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const startOfToday = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+    const diffDays = Math.round((dt - startOfToday) / 86400000);
+    if(diffDays > 0 && diffDays <= 6) return diasSemana[dt.getDay()];
+    return `dia ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+  }
+
+  function buildTaskCreatedConfirmation(task){
+    const dateLabel = relativeDateLabel(task.date);
+    const templates = [
+      `Certo! "${task.title}" foi agendado(a) para ${dateLabel} às ${task.time}. Já deixei tudo salvo na sua agenda. 🤍`,
+      `${task.title} adicionado(a) com sucesso para ${dateLabel} às ${task.time}.`,
+      `Prontinho! Marquei "${task.title}" para ${dateLabel} às ${task.time}. Você pode conferir na sua agenda quando quiser.`
+    ];
+    return templates[Math.floor(Math.random() * templates.length)];
+  }
+
+  function createTaskFromCommand(parsed){
+    const task = { id: nextId++, title: parsed.title, category: parsed.category, date: parsed.date, time: parsed.time, place: '' };
+    tasks.push(task);
+    saveTasks();
+
+    // Atualiza a lista de compromissos e o calendário imediatamente, sem recarregar a página
+    // (renderCalendar/renderDayDetail não fazem nada em telas onde os elementos não existem).
+    selectedDay = task.date;
+    renderTaskList();
+    renderCalendar();
+    renderDayDetail(task.date);
+
+    const confirmation = buildTaskCreatedConfirmation(task);
+    localStorage.setItem(AGENDA_PENDING_DATE_KEY, task.date);
+    localStorage.setItem(AGENDA_PENDING_TASK_KEY, task.title);
+    localStorage.setItem(CHAT_PENDING_KEY, confirmation);
+    window.location.href = `${getBasePath()}agenda.html`;
+  }
+
+  function handleHomeSearch(query){
+    const text = (query || '').trim();
+    if(!text) return;
+
+    const parsedTask = parseTaskCommand(text);
+    if(parsedTask){
+      createTaskFromCommand(parsedTask);
+      return;
+    }
+
+    const normalized = text.toLowerCase();
+    const match = tasks.find((task)=> task.title.toLowerCase().includes(normalized));
+    if(match){
+      openAgendaForTask(match);
+      return;
+    }
+    localStorage.setItem(CHAT_PENDING_KEY, `Olá, tudo bem? Juliana? Vou te ajudar com: ${text}`);
+    window.location.href = `${getBasePath()}chat.html`;
+  }
+
+  const homeSearch = document.getElementById('home-search');
+  const homeSend = document.getElementById('home-send');
+  const homeMic = document.getElementById('home-mic');
+
+  if(homeSearch && homeSend){
+    const submitHomeSearch = ()=>{
+      handleHomeSearch(homeSearch.value);
+      homeSearch.value = '';
+    };
+    homeSend.addEventListener('click', submitHomeSearch);
+    homeSearch.addEventListener('keydown', (event)=>{
+      if(event.key === 'Enter'){
+        event.preventDefault();
+        submitHomeSearch();
+      }
+    });
+  }
+
+  if(homeMic && homeSearch){
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(SpeechRecognition){
+      const recognizer = new SpeechRecognition();
+      recognizer.lang = 'pt-BR';
+      recognizer.continuous = false;
+      recognizer.interimResults = false;
+      recognizer.onresult = (event)=>{
+        const transcript = event.results[0][0].transcript.trim();
+        if(transcript){
+          homeSearch.value = transcript;
+          handleHomeSearch(transcript);
+        }
+      };
+      recognizer.onerror = ()=> homeMic.classList.remove('listening');
+      recognizer.onend = ()=> homeMic.classList.remove('listening');
+      homeMic.addEventListener('click', ()=>{
+        if(homeMic.classList.contains('listening')){
+          recognizer.stop();
+          return;
+        }
+        homeMic.classList.add('listening');
+        recognizer.start();
+      });
+    } else {
+      homeMic.addEventListener('click', ()=>{
+        alert('Reconhecimento de voz não está disponível neste navegador.');
+      });
+    }
+  }
 
   // ---------- DATA NO HEADER ----------
   const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
@@ -269,82 +554,38 @@
     return `${day}/${month}/${year}`;
   }
 
-  function buildEmergencyOptions(){
-    const defaultContacts = [
-      { id: 'contato-chefe', name: 'Chefe - Carlos', phone: '(11) 99999-0001' },
-      { id: 'contato-coordenadora', name: 'Coordenação - Patrícia', phone: '(11) 98888-2222' },
-      { id: 'contato-rh', name: 'RH - Juliana', phone: '(11) 97777-3333' },
-      { id: 'contato-lider', name: 'Liderança - André', phone: '(11) 96666-4444' },
-    ];
-    const workTasks = sortedTasks().filter((task)=> task.category === 'trabalho');
-    return {
-      contacts: defaultContacts,
-      tasks: workTasks.length ? workTasks.slice(0, 5) : [
-        { id: 901, title: 'Reunião com a equipe', category: 'trabalho', date: todayISO(), time: '09:00', place: 'Sala de reunião' },
-        { id: 902, title: 'Reunião com a coordenação', category: 'trabalho', date: addDays(1), time: '14:30', place: 'Escritório' },
-      ],
-    };
-  }
+  // ---------- DADOS: GESTOR E CONTATOS DE APOIO (EMERGÊNCIA) ----------
+  const MANAGER_KEY = 'mia.manager';
+  const SUPPORT_CONTACTS_KEY = 'mia.supportContacts';
 
-  function updateEmergencyPreview(){
-    const taskSelect = document.getElementById('emg-task-select');
-    const contactSelect = document.getElementById('emg-contact-select');
-    const taskTitle = document.getElementById('emg-task-title');
-    const taskMeta = document.getElementById('emg-task-meta');
-    const suggestedContact = document.getElementById('emg-suggested-contact');
-    const messagePreview = document.getElementById('emg-message-preview');
-    const confirmCopy = document.getElementById('emg-confirm-copy');
-
-    if(!taskSelect || !contactSelect || !taskTitle || !taskMeta || !suggestedContact || !messagePreview || !confirmCopy) return;
-
-    const selectedTask = tasks.find((task)=> String(task.id) === taskSelect.value) || tasks[0] || null;
-    const selectedContact = contactSelect.options[contactSelect.selectedIndex] || null;
-    const contactLabel = selectedContact ? selectedContact.textContent : 'Contato de confiança';
-
-    if(selectedTask){
-      taskTitle.textContent = selectedTask.title;
-      taskMeta.textContent = `${formatDateBR(selectedTask.date)} às ${selectedTask.time} · ${selectedTask.place || 'sem local informado'}`;
-    } else {
-      taskTitle.textContent = 'Compromisso próximo';
-      taskMeta.textContent = 'Horário e contexto serão preenchidos pela MIA.';
+  function loadManager(){
+    try{
+      const saved = localStorage.getItem(MANAGER_KEY);
+      if(!saved) return null;
+      const parsed = JSON.parse(saved);
+      const normalizedName = String(parsed && parsed.name ? parsed.name : '').trim().toLowerCase();
+      if(parsed && parsed.name && parsed.phone && normalizedName !== 'rose'){
+        return parsed;
+      }
+      localStorage.removeItem(MANAGER_KEY);
+      return null;
+    } catch {
+      localStorage.removeItem(MANAGER_KEY);
+      return null;
     }
-
-    suggestedContact.textContent = contactLabel;
-
-    const messageLines = [
-      `Oi, ${contactLabel}.`,
-      '',
-      selectedTask
-        ? `Estou com um compromisso de trabalho (${selectedTask.title}) e não vou conseguir comparecer, em ${formatDateBR(selectedTask.date)} às ${selectedTask.time}.`
-        : 'Estou com um compromisso de trabalho e não vou conseguir comparecer no horário previsto.',
-      selectedTask?.place ? `Local: ${selectedTask.place}.` : 'Local: estou em deslocamento para o compromisso.',
-      '',
-      'Por favor, avise o chefe e considere isso como uma prioridade.'
-    ];
-
-    messagePreview.textContent = messageLines.join('\n');
-    confirmCopy.textContent = `Essa mensagem será enviada para ${contactLabel}${selectedTask ? ` sobre ${selectedTask.title}` : ''}.`;
+  }
+  function loadSupportContacts(){
+    try{
+      const saved = localStorage.getItem(SUPPORT_CONTACTS_KEY);
+      if(!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
   }
 
-  function fillEmergencyDemoData(){
-    const taskSelect = document.getElementById('emg-task-select');
-    const contactSelect = document.getElementById('emg-contact-select');
-    if(!taskSelect || !contactSelect) return;
-
-    const { contacts, tasks: emergencyTasks } = buildEmergencyOptions();
-
-    taskSelect.innerHTML = emergencyTasks.map((task)=> `
-      <option value="${task.id}">${task.title} - ${formatDateBR(task.date)} ${task.time}</option>
-    `).join('');
-
-    contactSelect.innerHTML = contacts.map((contact)=> `
-      <option value="${contact.id}">${contact.name} (${contact.phone})</option>
-    `).join('');
-
-    if(!taskSelect.value && emergencyTasks[0]) taskSelect.value = String(emergencyTasks[0].id);
-    if(!contactSelect.value && contacts[0]) contactSelect.value = contacts[0].id;
-    updateEmergencyPreview();
-  }
+  let manager = loadManager();
+  let supportContacts = loadSupportContacts();
+  if(!localStorage.getItem(SUPPORT_CONTACTS_KEY)) localStorage.setItem(SUPPORT_CONTACTS_KEY, JSON.stringify(supportContacts));
 
   const verMaisBtn = document.getElementById('ver-mais-btn');
   if(verMaisBtn){
@@ -396,58 +637,394 @@
     }
   }
 
-  // ---------- MODAL: EMERGÊNCIA ----------
+  // ---------- MÓDULO: BOTÃO DE EMERGÊNCIA ----------
   const overlayEmg = document.getElementById('overlay-emergency');
-  function openEmergency(){
-    fillEmergencyDemoData();
-    if(overlayEmg) overlayEmg.classList.add('open');
-  }
   if(overlayEmg){
-    const emergencyButtons = document.querySelectorAll('.fab-emergency');
-    emergencyButtons.forEach((button)=>{
-      button.addEventListener('click', openEmergency);
-    });
-    const emergencyIds = ['btn-emergency', 'btn-emergency-2'];
-    emergencyIds.forEach((buttonId)=>{
+    const overlayManager = document.getElementById('overlay-emergency-manager');
+    const overlayManagerMsg = document.getElementById('overlay-emergency-manager-message');
+    const overlayManagerRegister = document.getElementById('overlay-emergency-manager-register');
+    const overlayContactRegister = document.getElementById('overlay-emergency-contact-register');
+    const overlayContactCall = document.getElementById('overlay-emergency-contact-call');
+    const overlayContactMsg = document.getElementById('overlay-emergency-contact-message');
+    const overlayConfirm = document.getElementById('overlay-emergency-confirm');
+    const allEmgOverlays = [overlayEmg, overlayManager, overlayManagerMsg, overlayManagerRegister, overlayContactRegister, overlayContactCall, overlayContactMsg, overlayConfirm].filter(Boolean);
+
+    let selectedContactIds = new Set();
+    let pendingSendAction = null;
+    let cachedLocationLink = null;
+
+    function openOverlay(el){ if(el) el.classList.add('open'); }
+    function closeOverlay(el){ if(el) el.classList.remove('open'); }
+    function closeAllEmergencyOverlays(){ allEmgOverlays.forEach(closeOverlay); }
+
+    function onlyDigits(str){ return String(str || '').replace(/\D/g,''); }
+    function buildWhatsAppLink(phone, text){
+      return `https://wa.me/${onlyDigits(phone)}?text=${encodeURIComponent(text)}`;
+    }
+
+    // -------- MODAL PRINCIPAL: "Avisar o gestor" / "Avisar um contato" --------
+    function updateContinueButton(){
+      const btn = document.getElementById('emg-continue-contacts');
+      if(!btn) return;
+      btn.disabled = selectedContactIds.size === 0;
+      btn.textContent = selectedContactIds.size > 1 ? `Continuar (${selectedContactIds.size} contatos)` : 'Continuar';
+    }
+
+    function renderEmergencyMain(){
+      const managerSlot = document.getElementById('emg-manager-slot');
+      if(managerSlot){
+        if(manager){
+          managerSlot.innerHTML = `
+            <button type="button" class="emg-item emg-item-btn" id="emg-open-manager">
+              <span class="emg-ico">👤</span>
+              <span><h4>${manager.name}</h4><p>Avisar ausência e enviar demandas pendentes</p></span>
+            </button>
+            <button type="button" class="btn-ghost" id="emg-add-manager-btn">Adicionar outro gestor</button>
+          `;
+        } else {
+          managerSlot.innerHTML = `
+            <div class="emg-item">
+              <span class="emg-ico">➕</span>
+              <span><h4>Nenhum gestor cadastrado</h4><p>Adicione um gestor para continuar.</p></span>
+            </div>
+            <button type="button" class="btn-primary" id="emg-add-manager-btn">Adicionar gestor</button>
+          `;
+        }
+      }
+
+      const managerButton = document.getElementById('emg-open-manager');
+      if(managerButton){
+        managerButton.addEventListener('click', ()=>{
+          if(managerDaysInput) managerDaysInput.value = 1;
+          renderManagerTasksPreview();
+          closeOverlay(overlayEmg);
+          openOverlay(overlayManager);
+        });
+      }
+
+      const addManagerButton = document.getElementById('emg-add-manager-btn');
+      if(addManagerButton){
+        addManagerButton.addEventListener('click', ()=>{
+          closeOverlay(overlayEmg);
+          openOverlay(overlayManagerRegister);
+        });
+      }
+
+      const list = document.getElementById('emg-contacts-list');
+      if(!list) return;
+      if(!supportContacts.length){
+        list.innerHTML = `
+          <div class="emg-item">
+            <span class="emg-ico">➕</span>
+            <span><h4>Nenhum contato cadastrado</h4><p>Adicione um contato para continuar.</p></span>
+          </div>
+          <button type="button" class="btn-primary" id="emg-add-contact-btn">Adicionar contato</button>
+        `;
+      } else {
+        list.innerHTML = supportContacts.map((c)=> `
+          <label class="emg-item emg-checkbox-item${selectedContactIds.has(c.id) ? ' checked' : ''}">
+            <input type="checkbox" class="emg-contact-checkbox" value="${c.id}" ${selectedContactIds.has(c.id) ? 'checked' : ''}>
+            <span class="emg-ico">🧑</span>
+            <span><h4>${c.name}</h4><p>${c.phone}</p></span>
+          </label>
+        `).join('');
+
+        list.querySelectorAll('.emg-contact-checkbox').forEach((checkbox)=>{
+          checkbox.addEventListener('change', ()=>{
+            const id = checkbox.value;
+            if(checkbox.checked) selectedContactIds.add(id); else selectedContactIds.delete(id);
+            checkbox.closest('.emg-checkbox-item').classList.toggle('checked', checkbox.checked);
+            updateContinueButton();
+          });
+        });
+      }
+
+      const addContactButton = document.getElementById('emg-add-contact-btn');
+      if(addContactButton){
+        addContactButton.addEventListener('click', ()=>{
+          closeOverlay(overlayEmg);
+          openOverlay(overlayContactRegister);
+        });
+      }
+      updateContinueButton();
+    }
+
+    function openEmergency(){
+      renderEmergencyMain();
+      openOverlay(overlayEmg);
+    }
+
+    document.querySelectorAll('.fab-emergency').forEach((button)=> button.addEventListener('click', openEmergency));
+    ['btn-emergency', 'btn-emergency-2'].forEach((buttonId)=>{
       const button = document.getElementById(buttonId);
       if(button) button.addEventListener('click', openEmergency);
     });
+
     const closeEmergency = document.getElementById('close-emergency');
-    if(closeEmergency) closeEmergency.addEventListener('click', ()=> overlayEmg.classList.remove('open'));
-    overlayEmg.addEventListener('click', (e)=>{ if(e.target === overlayEmg) overlayEmg.classList.remove('open'); });
-    const emgContact = document.getElementById('emg-contact');
-    if(emgContact){
-      emgContact.addEventListener('click', ()=>{
-        alert('Em um app completo, isso ligaria diretamente para o seu contato de confiança salvo.');
+    if(closeEmergency) closeEmergency.addEventListener('click', ()=> closeOverlay(overlayEmg));
+    overlayEmg.addEventListener('click', (e)=>{ if(e.target === overlayEmg) closeOverlay(overlayEmg); });
+
+    // -------- FLUXO 1: AVISAR O GESTOR --------
+    const btnOpenManager = document.getElementById('emg-open-manager');
+    const managerDaysInput = document.getElementById('emg-manager-days');
+    const managerTasksPreview = document.getElementById('emg-manager-tasks');
+
+    function getManagerWorkTasks(days){
+      const n = Math.max(1, parseInt(days, 10) || 1);
+      const start = todayISO();
+      const end = addDays(n - 1);
+      return sortedTasks().filter((t)=> t.category === 'trabalho' && t.date >= start && t.date <= end);
+    }
+
+    function renderManagerTasksPreview(){
+      if(!managerTasksPreview || !managerDaysInput) return;
+      const workTasks = getManagerWorkTasks(managerDaysInput.value);
+      managerTasksPreview.innerHTML = workTasks.length
+        ? `<ul>${workTasks.map((t)=> `<li>${t.title} — ${formatDateBR(t.date)} às ${t.time}</li>`).join('')}</ul>`
+        : `<p class="emg-task-empty">Nenhuma tarefa com a tag Trabalho nesse período.</p>`;
+    }
+
+    if(btnOpenManager){
+      btnOpenManager.addEventListener('click', ()=>{
+        if(managerDaysInput) managerDaysInput.value = 1;
+        renderManagerTasksPreview();
+        closeOverlay(overlayEmg);
+        openOverlay(overlayManager);
+      });
+    }
+    if(managerDaysInput) managerDaysInput.addEventListener('input', renderManagerTasksPreview);
+
+    const managerBack = document.getElementById('emg-manager-back');
+    if(managerBack) managerBack.addEventListener('click', ()=>{ closeOverlay(overlayManager); openEmergency(); });
+    if(overlayManager) overlayManager.addEventListener('click', (e)=>{ if(e.target === overlayManager) closeOverlay(overlayManager); });
+
+    const managerRegisterBack = document.getElementById('emg-manager-register-back');
+    if(managerRegisterBack) managerRegisterBack.addEventListener('click', ()=>{ closeOverlay(overlayManagerRegister); openEmergency(); });
+    if(overlayManagerRegister) overlayManagerRegister.addEventListener('click', (e)=>{ if(e.target === overlayManagerRegister) closeOverlay(overlayManagerRegister); });
+
+    const contactRegisterBack = document.getElementById('emg-contact-register-back');
+    if(contactRegisterBack) contactRegisterBack.addEventListener('click', ()=>{ closeOverlay(overlayContactRegister); openEmergency(); });
+    if(overlayContactRegister) overlayContactRegister.addEventListener('click', (e)=>{ if(e.target === overlayContactRegister) closeOverlay(overlayContactRegister); });
+
+    const contactRegisterSave = document.getElementById('emg-contact-register-save');
+    if(contactRegisterSave){
+      contactRegisterSave.addEventListener('click', ()=>{
+        const nameInput = document.getElementById('emg-contact-register-name');
+        const phoneInput = document.getElementById('emg-contact-register-phone');
+        const name = nameInput ? nameInput.value.trim() : '';
+        const phone = phoneInput ? phoneInput.value.trim() : '';
+        if(!name || !phone){
+          if(nameInput) nameInput.focus();
+          return;
+        }
+        supportContacts = [...supportContacts, { id: `contato-${Date.now()}`, name, phone }];
+        localStorage.setItem(SUPPORT_CONTACTS_KEY, JSON.stringify(supportContacts));
+        renderEmergencyMain();
+        closeOverlay(overlayContactRegister);
+        openEmergency();
       });
     }
 
-    const taskSelect = document.getElementById('emg-task-select');
-    const contactSelect = document.getElementById('emg-contact-select');
-    const confirmOpen = document.getElementById('emg-open-confirm');
+    const managerRegisterSave = document.getElementById('emg-manager-register-save');
+    if(managerRegisterSave){
+      managerRegisterSave.addEventListener('click', ()=>{
+        const nameInput = document.getElementById('emg-manager-register-name');
+        const phoneInput = document.getElementById('emg-manager-register-phone');
+        const name = nameInput ? nameInput.value.trim() : '';
+        const phone = phoneInput ? phoneInput.value.trim() : '';
+        if(!name || !phone){
+          if(nameInput) nameInput.focus();
+          return;
+        }
+        manager = { name, phone };
+        localStorage.setItem(MANAGER_KEY, JSON.stringify(manager));
+        renderEmergencyMain();
+        closeOverlay(overlayManagerRegister);
+        openEmergency();
+      });
+    }
+
+    const managerNext = document.getElementById('emg-manager-next');
+    if(managerNext){
+      managerNext.addEventListener('click', ()=>{
+        const n = Math.max(1, parseInt(managerDaysInput ? managerDaysInput.value : 1, 10) || 1);
+        const workTasks = getManagerWorkTasks(n);
+        const dateLabel = n === 1 ? formatDateBR(todayISO()) : `${formatDateBR(todayISO())} a ${formatDateBR(addDays(n - 1))}`;
+
+        const question = document.getElementById('emg-manager-message-question');
+        if(question) question.textContent = `Você deseja enviar esta mensagem para ${manager.name} junto com as suas próximas demandas da empresa?`;
+
+        const taskLines = workTasks.length
+          ? workTasks.map((t)=> `- ${t.title} (${formatDateBR(t.date)} às ${t.time})`).join('\n')
+          : '- Nenhuma tarefa de trabalho encontrada nesse período.';
+
+        const messageText = [
+          '🚨 Emergência',
+          '',
+          'Ocorreu uma emergência e preciso me ausentar imediatamente. Entrarei em contato assim que possível. Obrigado(a) pela compreensão.',
+          '',
+          `Segue aqui as minhas demandas do(s) dia(s) ${dateLabel}:`,
+          '',
+          taskLines
+        ].join('\n');
+
+        const textarea = document.getElementById('emg-manager-message-text');
+        if(textarea) textarea.value = messageText;
+
+        closeOverlay(overlayManager);
+        openOverlay(overlayManagerMsg);
+      });
+    }
+
+    const managerMsgBack = document.getElementById('emg-manager-message-back');
+    if(managerMsgBack) managerMsgBack.addEventListener('click', ()=>{ closeOverlay(overlayManagerMsg); openOverlay(overlayManager); });
+    if(overlayManagerMsg) overlayManagerMsg.addEventListener('click', (e)=>{ if(e.target === overlayManagerMsg) closeOverlay(overlayManagerMsg); });
+
+    const managerSend = document.getElementById('emg-manager-send');
+    if(managerSend){
+      managerSend.addEventListener('click', ()=>{
+        pendingSendAction = ()=>{
+          const textarea = document.getElementById('emg-manager-message-text');
+          const text = textarea ? textarea.value : '';
+          window.open(buildWhatsAppLink(manager.phone, text), '_blank');
+        };
+        openOverlay(overlayConfirm);
+      });
+    }
+
+    // -------- FLUXO 2: AVISAR UM CONTATO --------
+    const continueContacts = document.getElementById('emg-continue-contacts');
+    if(continueContacts){
+      continueContacts.addEventListener('click', ()=>{
+        if(selectedContactIds.size === 0) return;
+        closeOverlay(overlayEmg);
+        if(selectedContactIds.size === 1){
+          const contact = supportContacts.find((c)=> selectedContactIds.has(c.id));
+          const title = document.getElementById('emg-contact-call-title');
+          if(title && contact) title.textContent = `O que você deseja fazer com ${contact.name}?`;
+          openOverlay(overlayContactCall);
+        } else {
+          openContactMessageStep();
+        }
+      });
+    }
+
+    const contactCallBack = document.getElementById('emg-contact-call-back');
+    if(contactCallBack) contactCallBack.addEventListener('click', ()=>{ closeOverlay(overlayContactCall); openEmergency(); });
+    if(overlayContactCall) overlayContactCall.addEventListener('click', (e)=>{ if(e.target === overlayContactCall) closeOverlay(overlayContactCall); });
+
+    const contactCallBtn = document.getElementById('emg-contact-call-btn');
+    if(contactCallBtn){
+      contactCallBtn.addEventListener('click', ()=>{
+        const contact = supportContacts.find((c)=> selectedContactIds.has(c.id));
+        if(contact) window.location.href = `tel:${onlyDigits(contact.phone)}`;
+      });
+    }
+
+    const contactMessageBtn = document.getElementById('emg-contact-message-btn');
+    if(contactMessageBtn){
+      contactMessageBtn.addEventListener('click', ()=>{
+        closeOverlay(overlayContactCall);
+        openContactMessageStep();
+      });
+    }
+
+    const shareLocationCheckbox = document.getElementById('emg-share-location');
+    function buildContactMessage(withLocation){
+      const lines = [
+        '🚨 Emergência',
+        '',
+        'Ocorreu uma emergência e preciso da sua ajuda.',
+        '',
+        'Entre em contato comigo assim que possível.'
+      ];
+      if(withLocation){
+        lines.push('', 'Estou compartilhando minha localização com você.');
+        lines.push(cachedLocationLink || 'Localização: obtendo…');
+      }
+      return lines.join('\n');
+    }
+
+    function requestLocationLink(){
+      return new Promise((resolve)=>{
+        if(!navigator.geolocation){ resolve(null); return; }
+        navigator.geolocation.getCurrentPosition(
+          (pos)=>{
+            const { latitude, longitude } = pos.coords;
+            resolve(`https://www.google.com/maps?q=${latitude},${longitude}`);
+          },
+          ()=> resolve(null),
+          { timeout: 8000 }
+        );
+      });
+    }
+
+    function openContactMessageStep(){
+      const contacts = supportContacts.filter((c)=> selectedContactIds.has(c.id));
+      const names = contacts.map((c)=> c.name).join(', ');
+      const question = document.getElementById('emg-contact-message-question');
+      if(question) question.textContent = `Você deseja enviar esta mensagem para ${names}?`;
+      if(shareLocationCheckbox) shareLocationCheckbox.checked = false;
+      const textarea = document.getElementById('emg-contact-message-text');
+      if(textarea) textarea.value = buildContactMessage(false);
+      openOverlay(overlayContactMsg);
+    }
+
+    if(shareLocationCheckbox){
+      shareLocationCheckbox.addEventListener('change', async ()=>{
+        const textarea = document.getElementById('emg-contact-message-text');
+        if(!shareLocationCheckbox.checked){
+          if(textarea) textarea.value = buildContactMessage(false);
+          return;
+        }
+        if(textarea) textarea.value = buildContactMessage(true);
+        const link = await requestLocationLink();
+        if(!link){
+          alert('Não foi possível obter sua localização. Verifique as permissões do navegador.');
+          shareLocationCheckbox.checked = false;
+          if(textarea) textarea.value = buildContactMessage(false);
+          return;
+        }
+        cachedLocationLink = link;
+        if(textarea) textarea.value = buildContactMessage(true);
+      });
+    }
+
+    const contactMsgBack = document.getElementById('emg-contact-message-back');
+    if(contactMsgBack){
+      contactMsgBack.addEventListener('click', ()=>{
+        closeOverlay(overlayContactMsg);
+        if(selectedContactIds.size === 1) openOverlay(overlayContactCall); else openEmergency();
+      });
+    }
+    if(overlayContactMsg) overlayContactMsg.addEventListener('click', (e)=>{ if(e.target === overlayContactMsg) closeOverlay(overlayContactMsg); });
+
+    const contactSend = document.getElementById('emg-contact-send');
+    if(contactSend){
+      contactSend.addEventListener('click', ()=>{
+        pendingSendAction = ()=>{
+          const textarea = document.getElementById('emg-contact-message-text');
+          const text = textarea ? textarea.value : '';
+          const contacts = supportContacts.filter((c)=> selectedContactIds.has(c.id));
+          contacts.forEach((c)=> window.open(buildWhatsAppLink(c.phone, text), '_blank'));
+        };
+        openOverlay(overlayConfirm);
+      });
+    }
+
+    // -------- CONFIRMAÇÃO FINAL (COMUM AOS DOIS FLUXOS) --------
     const cancelConfirm = document.getElementById('emg-cancel-confirm');
+    if(cancelConfirm) cancelConfirm.addEventListener('click', ()=>{ pendingSendAction = null; closeOverlay(overlayConfirm); });
+
     const confirmSend = document.getElementById('emg-confirm-send');
-    const overlayConfirm = document.getElementById('overlay-emergency-confirm');
-
-    if(taskSelect) taskSelect.addEventListener('change', updateEmergencyPreview);
-    if(contactSelect) contactSelect.addEventListener('change', updateEmergencyPreview);
-
-    if(confirmOpen && overlayConfirm){
-      confirmOpen.addEventListener('click', ()=>{
-        updateEmergencyPreview();
-        overlayConfirm.classList.add('open');
-      });
-    }
-
-    if(cancelConfirm && overlayConfirm) cancelConfirm.addEventListener('click', ()=> overlayConfirm.classList.remove('open'));
-    if(confirmSend && overlayConfirm){
+    if(confirmSend){
       confirmSend.addEventListener('click', ()=>{
-        overlayConfirm.classList.remove('open');
-        overlayEmg.classList.remove('open');
-        alert('Mensagem de demonstração pronta para envio.');
+        if(pendingSendAction) pendingSendAction();
+        pendingSendAction = null;
+        closeAllEmergencyOverlays();
       });
     }
-    if(overlayConfirm) overlayConfirm.addEventListener('click', (e)=>{ if(e.target === overlayConfirm) overlayConfirm.classList.remove('open'); });
+    if(overlayConfirm) overlayConfirm.addEventListener('click', (e)=>{ if(e.target === overlayConfirm) closeOverlay(overlayConfirm); });
   }
 
   // ---------- CALENDÁRIO ----------
@@ -507,11 +1084,30 @@
     });
   }
 
+  function handlePendingAgendaNavigation(){
+    const pendingDate = localStorage.getItem(AGENDA_PENDING_DATE_KEY);
+    if(!pendingDate) return;
+    selectedDay = pendingDate;
+    calCursor = new Date(`${pendingDate}T00:00:00`);
+    renderCalendar();
+    renderDayDetail(selectedDay);
+    localStorage.removeItem(AGENDA_PENDING_DATE_KEY);
+    localStorage.removeItem(AGENDA_PENDING_TASK_KEY);
+    if(window.location.pathname.includes('/pages/agenda.html') || window.location.pathname.endsWith('/agenda.html')){
+      setTimeout(()=>{
+        if(localStorage.getItem(CHAT_PENDING_KEY)){
+          window.location.href = `${getBasePath()}chat.html`;
+        }
+      }, 950);
+    }
+  }
+
   // ---------- INICIALIZAÇÃO ----------
   renderTodayPill();
   renderTaskList();
   renderCalendar();
   renderDayDetail(selectedDay);
+  handlePendingAgendaNavigation();
 
   // ---------- NAVEGAÇÃO DO CALENDÁRIO ----------
   const calPrev = document.getElementById('cal-prev');

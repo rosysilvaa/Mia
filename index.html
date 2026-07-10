@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Colo — para a Juliana</title>
+<title>MIA</title>
 
 <link rel="stylesheet" href="css/style.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -117,53 +117,156 @@
     </div>
   </div>
 
+  <!-- ===================== MODAL: EMERGÊNCIA (PRINCIPAL) ===================== -->
   <div class="overlay" id="overlay-emergency">
     <div class="sheet sheet-emergency">
-      <p class="sheet-kicker">Apoio de emergência</p>
-      <h3>Quero avisar um contato de confiança?</h3>
-      <p class="sheet-copy" id="emg-intro">A MIA já deixou uma mensagem pronta com o contexto do compromisso, sua localização pessoal e o contato sugerido. Você só revisa e confirma o envio.</p>
+      <p class="sheet-kicker">Emergência</p>
+      <h3>Como a MIA pode te ajudar agora?</h3>
+      <p class="sheet-copy">Escolha quem você quer avisar. Você revisa e confirma tudo antes de qualquer mensagem sair.</p>
 
-      <div class="emg-context-card" id="emg-context-card">
-        <span class="emg-context-label">Compromisso sugerido</span>
-        <strong id="emg-task-title">Compromisso próximo</strong>
-        <p id="emg-task-meta">Horário e contexto serão preenchidos pela MIA.</p>
-        <span class="emg-contact-pill" id="emg-suggested-contact">Contato sugerido</span>
+      <div class="emg-section">
+        <span class="emg-section-title">Avisar o gestor</span>
+        <div id="emg-manager-slot"></div>
       </div>
 
-      <div class="emg-inline-selects">
-        <div class="field field-compact">
-          <label for="emg-task-select">Outro compromisso</label>
-          <select id="emg-task-select"></select>
-        </div>
-        <div class="field field-compact">
-          <label for="emg-contact-select">Outro contato</label>
-          <select id="emg-contact-select"></select>
-        </div>
+      <div class="emg-section">
+        <span class="emg-section-title">Avisar um contato</span>
+        <p class="emg-hint">Selecione uma ou mais pessoas para contatar.</p>
+        <div class="emg-list" id="emg-contacts-list"></div>
       </div>
 
-      <div class="emg-step" id="emg-step-1">
-        <div class="emg-preview-box">
-          <label>Mensagem pronta para envio</label>
-          <div class="emg-message-preview" id="emg-message-preview"></div>
-        </div>
-        <div class="sheet-actions">
-          <button class="btn-ghost" id="close-emergency">Cancelar</button>
-          <button class="btn-primary" id="emg-open-confirm">Enviar mensagem</button>
-        </div>
+      <div class="sheet-actions">
+        <button class="btn-ghost" id="close-emergency">Fechar</button>
+        <button class="btn-primary" id="emg-continue-contacts" disabled>Continuar</button>
       </div>
-
-      <p class="emg-footnote">A mensagem inclui o compromisso, o contexto e a localização pessoal. Nenhum número de emergência é exibido nesta tela.</p>
     </div>
   </div>
 
+  <!-- ===================== MODAL: GESTOR — DIAS DE AUSÊNCIA ===================== -->
+  <div class="overlay" id="overlay-emergency-manager">
+    <div class="sheet sheet-emergency">
+      <p class="sheet-kicker">Avisar o gestor</p>
+      <h3>Por quantos dias você acredita que ficará ausente?</h3>
+      <p class="sheet-copy">A MIA vai buscar suas tarefas com a tag <strong>Trabalho</strong> nesse período.</p>
+
+      <div class="field">
+        <label for="emg-manager-days">Dias de ausência</label>
+        <input type="number" id="emg-manager-days" min="1" value="1">
+      </div>
+
+      <div class="field">
+        <label>Tarefas de trabalho encontradas</label>
+        <div class="emg-task-preview" id="emg-manager-tasks"></div>
+      </div>
+
+      <div class="sheet-actions">
+        <button class="btn-ghost" id="emg-manager-back">Voltar</button>
+        <button class="btn-primary" id="emg-manager-next">Continuar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: GESTOR — CADASTRO ===================== -->
+  <div class="overlay" id="overlay-emergency-manager-register">
+    <div class="sheet sheet-emergency">
+      <p class="sheet-kicker">Cadastrar gestor</p>
+      <h3>Adicionar gestor para avisar em emergência</h3>
+      <div class="field">
+        <label for="emg-manager-register-name">Nome</label>
+        <input type="text" id="emg-manager-register-name" placeholder="Ex.: Patrícia">
+      </div>
+      <div class="field">
+        <label for="emg-manager-register-phone">Telefone</label>
+        <input type="tel" id="emg-manager-register-phone" placeholder="Ex.: 5511988882222">
+      </div>
+      <div class="sheet-actions">
+        <button class="btn-ghost" id="emg-manager-register-back">Voltar</button>
+        <button class="btn-primary" id="emg-manager-register-save">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: GESTOR — MENSAGEM ===================== -->
+  <div class="overlay" id="overlay-emergency-manager-message">
+    <div class="sheet sheet-emergency">
+      <p class="sheet-kicker">Revisar mensagem</p>
+      <h3 id="emg-manager-message-question">Você deseja enviar esta mensagem para o gestor?</h3>
+      <div class="field">
+        <label>Mensagem (você pode editar tudo antes de enviar)</label>
+        <textarea id="emg-manager-message-text" rows="10"></textarea>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn-ghost" id="emg-manager-message-back">Voltar</button>
+        <button class="btn-primary" id="emg-manager-send">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: CONTATO — CADASTRO ===================== -->
+  <div class="overlay" id="overlay-emergency-contact-register">
+    <div class="sheet sheet-emergency">
+      <p class="sheet-kicker">Cadastrar contato</p>
+      <h3>Adicionar um contato para avisar em emergência</h3>
+      <div class="field">
+        <label for="emg-contact-register-name">Nome</label>
+        <input type="text" id="emg-contact-register-name" placeholder="Ex.: Mariana">
+      </div>
+      <div class="field">
+        <label for="emg-contact-register-phone">Telefone</label>
+        <input type="tel" id="emg-contact-register-phone" placeholder="Ex.: 5511999990001">
+      </div>
+      <div class="sheet-actions">
+        <button class="btn-ghost" id="emg-contact-register-back">Voltar</button>
+        <button class="btn-primary" id="emg-contact-register-save">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: CONTATO — LIGAR OU ENVIAR MENSAGEM ===================== -->
+  <div class="overlay" id="overlay-emergency-contact-call">
+    <div class="sheet sheet-emergency">
+      <p class="sheet-kicker">Avisar um contato</p>
+      <h3 id="emg-contact-call-title">O que você deseja fazer?</h3>
+      <div class="emg-call-actions">
+        <button class="btn-primary" id="emg-contact-call-btn">📞 Ligar</button>
+        <button class="btn-primary" id="emg-contact-message-btn">💬 Enviar mensagem</button>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn-ghost" id="emg-contact-call-back">Voltar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: CONTATO — MENSAGEM ===================== -->
+  <div class="overlay" id="overlay-emergency-contact-message">
+    <div class="sheet sheet-emergency">
+      <p class="sheet-kicker">Revisar mensagem</p>
+      <h3 id="emg-contact-message-question">Você deseja enviar esta mensagem?</h3>
+
+      <div class="emg-double-check">
+        <input type="checkbox" id="emg-share-location">
+        <label for="emg-share-location">Compartilhar localização</label>
+      </div>
+
+      <div class="field">
+        <label>Mensagem (você pode editar tudo antes de enviar)</label>
+        <textarea id="emg-contact-message-text" rows="9"></textarea>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn-ghost" id="emg-contact-message-back">Voltar</button>
+        <button class="btn-primary" id="emg-contact-send">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: CONFIRMAÇÃO FINAL (COMUM) ===================== -->
   <div class="overlay" id="overlay-emergency-confirm">
     <div class="sheet sheet-confirm">
       <p class="sheet-kicker">Tem certeza?</p>
-      <h3>Enviar esta mensagem agora?</h3>
-      <p class="sheet-copy" id="emg-confirm-copy">Essa mensagem será enviada ao contato selecionado com o contexto do compromisso e a sua localização pessoal.</p>
+      <h3>Você tem certeza que deseja enviar esta mensagem?</h3>
       <div class="sheet-actions">
-        <button class="btn-ghost" id="emg-cancel-confirm">Voltar</button>
-        <button class="btn-primary" id="emg-confirm-send">Sim, enviar</button>
+        <button class="btn-ghost" id="emg-cancel-confirm">Cancelar</button>
+        <button class="btn-primary" id="emg-confirm-send">Confirmar envio</button>
       </div>
     </div>
   </div>

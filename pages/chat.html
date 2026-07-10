@@ -71,23 +71,316 @@
       "padrão": "Entendi. Me conta mais sobre isso? Estou aqui para te apoiar no que precisar."
     };
 
+    const pendingChatMessage = localStorage.getItem("mia.pendingChatMessage");
+
+    // ---------- RITMO DA CONVERSA ----------
+    // Ajustado para um ritmo mais natural e menos "instantâneo", evitando
+    // que as respostas da MIA pareçam apressadas ou robóticas.
+    const VELOCIDADE_DIGITACAO_MS = 32;   // tempo (ms) entre cada caractere revelado
+    const DIGITACAO_MIN_MS = 700;         // duração mínima do indicador "digitando..."
+    const DIGITACAO_MAX_MS = 2600;        // duração máxima, para evitar esperas excessivas
+    let intervaloDigitacaoAtivo = null;   // evita sobreposição caso duas respostas sejam disparadas em sequência
+
     // Mensagem de boas-vindas da MIA ao carregar a página
     setTimeout(() => {
-      adicionarMensagem("Oi! Eu sou a MIA. Como está seu dia? Pode desabafar ou me pedir ajuda com a rotina.", "mia");
-    }, 600);
+      if (pendingChatMessage) {
+        adicionarMensagemDigitada(pendingChatMessage, "mia");
+        localStorage.removeItem("mia.pendingChatMessage");
+      } else {
+        adicionarMensagemDigitada("Oi! Eu sou a MIA. Como está seu dia? Pode desabafar ou me pedir ajuda com a rotina.", "mia");
+      }
+    }, 900);
 
-    // Função para renderizar as mensagens na tela
+    // Função para renderizar as mensagens na tela (texto aparece de uma vez — usada para o que a própria usuária digitou)
     function adicionarMensagem(texto, remetente) {
       const msgDiv = document.createElement("div");
       msgDiv.classList.add("message", remetente === "user" ? "user-msg" : "mia-msg");
       msgDiv.innerText = texto;
       chatBody.appendChild(msgDiv);
       chatBody.scrollTop = chatBody.scrollHeight; // Rola o chat para baixo
+      return msgDiv;
+    }
+
+    // Função para renderizar as respostas da MIA com efeito de digitação suave,
+    // caractere a caractere, em vez de aparecerem de forma instantânea.
+    function adicionarMensagemDigitada(texto, remetente) {
+      if (remetente !== "mia") {
+        return adicionarMensagem(texto, remetente);
+      }
+      if (intervaloDigitacaoAtivo) {
+        clearInterval(intervaloDigitacaoAtivo);
+        intervaloDigitacaoAtivo = null;
+      }
+      const msgDiv = adicionarMensagem("", "mia");
+      let posicao = 0;
+      intervaloDigitacaoAtivo = setInterval(() => {
+        posicao++;
+        msgDiv.innerText = texto.slice(0, posicao);
+        chatBody.scrollTop = chatBody.scrollHeight;
+        if (posicao >= texto.length) {
+          clearInterval(intervaloDigitacaoAtivo);
+          intervaloDigitacaoAtivo = null;
+        }
+      }, VELOCIDADE_DIGITACAO_MS);
+      return msgDiv;
+    }
+
+    // ---------- PARSER DE LINGUAGEM NATURAL PARA COMPROMISSOS (MIA) ----------
+    const STORAGE_KEY = 'mia.tasks';
+
+    function addDays(n) {
+      const d = new Date();
+      d.setDate(d.getDate() + n);
+      const off = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - off*60000);
+      return local.toISOString().slice(0,10);
+    }
+
+    const defaultTasks = [
+      { id:1, title:'Reunião com a coordenação', category:'trabalho', date:new Date().toISOString().slice(0,10), time:'09:30', place:'Escritório' },
+      { id:2, title:'Escola — reunião de pais', category:'familia', date:addDays(1), time:'14:00', place:'Colégio do Ana' },
+      { id:3, title:'Consulta médica', category:'eu', date:addDays(2), time:'10:15', place:'Clínica Bem Estar' },
+      { id:4, title:'Aniversário da tia Rosa', category:'familia', date:addDays(4), time:'19:00', place:'Casa da tia Rosa' },
+      { id:5, title:'Entrega do relatório mensal', category:'trabalho', date:addDays(5), time:'18:00', place:'Online' },
+      { id:6, title:'Ioga — 30 minutos pra mim', category:'eu', date:addDays(6), time:'07:00', place:'Em casa' },
+      { id:7, title:'Academia / Treino rápido', category:'eu', date:new Date().toISOString().slice(0,10), time:'18:30', place:'Academia' },
+      { id:8, title:'Comprar presente para tia Rosa', category:'familia', date:addDays(1), time:'10:00', place:'Shopping' },
+      { id:9, title:'Dentista', category:'eu', date:addDays(3), time:'09:00', place:'Odontoclin' },
+      { id:10, title:'Reunião de alinhamento', category:'trabalho', date:addDays(3), time:'15:00', place:'Zoom' }
+    ];
+
+    function loadTasks(){
+      try{
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if(!saved) return [...defaultTasks];
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : [...defaultTasks];
+      } catch {
+        return [...defaultTasks];
+      }
+    }
+
+    function saveTasks(tasksList){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasksList));
+    }
+
+    const TRIGGER_VERB_REGEX = /(?<!\p{L})(agendar|agende|agenda|marcar|marca|marque|adicionar|adicione|criar|crie|cadastrar|cadastre|lembrar|lembre|colocar|coloque|incluir|inclua|anotar|anote|anota|salvar|salve|salva)(?!\p{L})/iu;
+
+    const WEEKDAY_PATTERNS = [
+      { index:0, regex:/(?<!\p{L})domingo(?!\p{L})/iu },
+      { index:1, regex:/(?<!\p{L})segunda(-feira)?(?!\p{L})/iu },
+      { index:2, regex:/(?<!\p{L})ter[cç]a(-feira)?(?!\p{L})/iu },
+      { index:3, regex:/(?<!\p{L})quarta(-feira)?(?!\p{L})/iu },
+      { index:4, regex:/(?<!\p{L})quinta(-feira)?(?!\p{L})/iu },
+      { index:5, regex:/(?<!\p{L})sexta(-feira)?(?!\p{L})/iu },
+      { index:6, regex:/(?<!\p{L})s[aá]bado(?!\p{L})/iu }
+    ];
+
+    const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+    const diasSemana = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+
+    const todayISO = () => new Date().toISOString().slice(0,10);
+
+    const toISO = (d) => {
+      const off = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - off*60000);
+      return local.toISOString().slice(0,10);
+    };
+
+    function nextDateForWeekday(targetDow){
+      const d = new Date();
+      const diff = (targetDow - d.getDay() + 7) % 7;
+      d.setDate(d.getDate() + diff);
+      return toISO(d);
+    }
+
+    function extractDate(text){
+      let m = text.match(/(?<!\p{L})hoje(?!\p{L})/iu);
+      if(m) return { iso: todayISO(), match: m[0] };
+
+      m = text.match(/(?<!\p{L})depois de amanh[aã](?!\p{L})/iu);
+      if(m) return { iso: addDays(2), match: m[0] };
+
+      m = text.match(/(?<!\p{L})amanh[aã](?!\p{L})/iu);
+      if(m) return { iso: addDays(1), match: m[0] };
+
+      m = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+      if(m){
+        const day = parseInt(m[1], 10);
+        const month = parseInt(m[2], 10) - 1;
+        let year = m[3] ? parseInt(m[3], 10) : new Date().getFullYear();
+        if(year < 100) year += 2000;
+        return { iso: toISO(new Date(year, month, day)), match: m[0] };
+      }
+
+      m = text.match(/(?<!\p{L})dia\s+(\d{1,2})(?:\s+de\s+([a-zçàáâãéêíóôõú]+))?(?!\p{L})/iu);
+      if(m){
+        const day = parseInt(m[1], 10);
+        const now = new Date();
+        let month = now.getMonth();
+        const year = now.getFullYear();
+        if(m[2]){
+          const monthIdx = meses.findIndex((mm)=> mm.toLowerCase() === m[2].toLowerCase());
+          if(monthIdx >= 0) month = monthIdx;
+        }
+        let candidate = new Date(year, month, day);
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if(!m[2] && candidate < startOfToday){
+          candidate = new Date(year, month + 1, day);
+        }
+        return { iso: toISO(candidate), match: m[0] };
+      }
+
+      for(const wp of WEEKDAY_PATTERNS){
+        const wm = text.match(wp.regex);
+        if(wm) return { iso: nextDateForWeekday(wp.index), match: wm[0] };
+      }
+
+      return null;
+    }
+
+    function extractTime(text){
+      let m = text.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/i);
+      if(m){
+        const hh = String(parseInt(m[1], 10)).padStart(2, '0');
+        return { time: `${hh}:${m[2]}`, match: m[0] };
+      }
+      m = text.match(/\b([01]?\d|2[0-3])\s*h\b/i);
+      if(m){
+        const hh = String(parseInt(m[1], 10)).padStart(2, '0');
+        return { time: `${hh}:00`, match: m[0] };
+      }
+      return null;
+    }
+
+    function escapeRegExp(str){
+      return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function normalizeAccents(str){
+      return String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function removeMatchWithConnector(str, matchToken){
+      if(!matchToken) return str;
+      const escaped = escapeRegExp(matchToken);
+      const withConnector = new RegExp(`(?<!\\p{L})(para|em|no|na|dia|de|às|as)\\s+${escaped}`, 'iu');
+      if(withConnector.test(str)) return str.replace(withConnector, ' ');
+      return str.replace(new RegExp(escaped, 'i'), ' ');
+    }
+
+    function cleanupTitle(str){
+      let working = str.replace(/\s{2,}/g, ' ').trim();
+      let prevLength;
+      do{
+        prevLength = working.length;
+        working = working.replace(/^(uma|um|o|a|de|da|do|para|em|no|na|dia|às|as)\s+/i, '').trim();
+      } while(working.length !== prevLength && working.length > 0);
+      do{
+        prevLength = working.length;
+        working = working.replace(/\s+(para|em|no|na|de|às|as|dia)$/i, '').trim();
+        working = working.replace(/[.,;:!]+$/, '').trim();
+      } while(working.length !== prevLength && working.length > 0);
+      return working;
+    }
+
+    function guessCategory(text){
+      const t = normalizeAccents(text).toLowerCase();
+      if(/\b(reuniao|trabalho|relatorio|projeto|cliente|equipe|chefe|escritorio)\b/.test(t)) return 'trabalho';
+      if(/\b(aniversario|familia|escola|filho|filha|mae|pai|marido|esposa|avo|sobrinh\w*)\b/.test(t)) return 'familia';
+      return 'eu';
+    }
+
+    function parseTaskCommand(rawText){
+      const text = (rawText || '').trim();
+      if(!text) return null;
+
+      const hasTrigger = TRIGGER_VERB_REGEX.test(text);
+      const dateInfo = extractDate(text);
+      const timeInfo = extractTime(text);
+
+      if(!hasTrigger && !(dateInfo && timeInfo)) return null;
+
+      let working = text;
+      working = working.replace(TRIGGER_VERB_REGEX, ' ');
+      if(dateInfo) working = removeMatchWithConnector(working, dateInfo.match);
+      if(timeInfo) working = removeMatchWithConnector(working, timeInfo.match);
+
+      let title = cleanupTitle(working);
+      if(!title) title = 'Novo compromisso';
+      title = title.charAt(0).toUpperCase() + title.slice(1);
+
+      return {
+        title,
+        date: dateInfo ? dateInfo.iso : todayISO(),
+        time: timeInfo ? timeInfo.time : '09:00',
+        category: guessCategory(text)
+      };
+    }
+
+    function relativeDateLabel(iso){
+      if(iso === todayISO()) return 'hoje';
+      if(iso === addDays(1)) return 'amanhã';
+      const [y, m, d] = iso.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      const startOfToday = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+      const diffDays = Math.round((dt - startOfToday) / 86400000);
+      if(diffDays > 0 && diffDays <= 6) return diasSemana[dt.getDay()];
+      return `dia ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+    }
+
+    function buildTaskCreatedConfirmation(task){
+      const dateLabel = relativeDateLabel(task.date);
+      const templates = [
+        `Certo! "${task.title}" foi agendado(a) para ${dateLabel} às ${task.time}. Já deixei tudo salvo na sua agenda. 🤍`,
+        `${task.title} adicionado(a) com sucesso para ${dateLabel} às ${task.time}.`,
+        `Prontinho! Marquei "${task.title}" para ${dateLabel} às ${task.time}. Você pode conferir na sua agenda quando quiser.`
+      ];
+      return templates[Math.floor(Math.random() * templates.length)];
     }
 
     // Função que processa a resposta da MIA
     function lógicaRespostaMia(mensagemUsuario) {
       const textoLimpo = mensagemUsuario.toLowerCase().trim();
+
+      // Primeiro, tenta interpretar a mensagem como um comando para criar tarefa
+      const parsedTask = parseTaskCommand(mensagemUsuario);
+      if(parsedTask) {
+        // Salva a tarefa no localStorage
+        let currentTasks = loadTasks();
+        const nextId = currentTasks.reduce((max, t)=> Math.max(max, Number(t.id) || 0), 0) + 1;
+        const novaTask = {
+          id: nextId,
+          title: parsedTask.title,
+          category: parsedTask.category,
+          date: parsedTask.date,
+          time: parsedTask.time,
+          place: ''
+        };
+        currentTasks.push(novaTask);
+        saveTasks(currentTasks);
+
+        const respostaConfirmacao = buildTaskCreatedConfirmation(novaTask);
+        
+        // Efeito de "MIA está digitando..."
+        const indicadorDigitando = document.createElement("div");
+        indicadorDigitando.classList.add("typing-indicator");
+        indicadorDigitando.innerText = "MIA está digitando...";
+        chatBody.appendChild(indicadorDigitando);
+        chatBody.scrollTop = chatBody.scrollHeight;
+
+        const duracaoDigitando = Math.min(
+          DIGITACAO_MAX_MS,
+          Math.max(DIGITACAO_MIN_MS, respostaConfirmacao.length * 45)
+        );
+
+        setTimeout(() => {
+          indicadorDigitando.remove();
+          adicionarMensagemDigitada(respostaConfirmacao, "mia");
+        }, duracaoDigitando);
+        return;
+      }
+
       let resposta = respostasMia["padrão"];
 
       // Procura por palavras-chave na frase do usuário
@@ -105,10 +398,17 @@
       chatBody.appendChild(indicadorDigitando);
       chatBody.scrollTop = chatBody.scrollHeight;
 
+      // Duração do indicador proporcional ao tamanho da resposta (mais natural),
+      // sempre dentro de limites para não travar nem demorar demais.
+      const duracaoDigitando = Math.min(
+        DIGITACAO_MAX_MS,
+        Math.max(DIGITACAO_MIN_MS, resposta.length * 45)
+      );
+
       setTimeout(() => {
         indicadorDigitando.remove();
-        adicionarMensagem(resposta, "mia");
-      }, 1200); // 1.2 segundos de delay para parecer real
+        adicionarMensagemDigitada(resposta, "mia");
+      }, duracaoDigitando);
     }
 
     // Evento de enviar mensagem ao clicar no botão

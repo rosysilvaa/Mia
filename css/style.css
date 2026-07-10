@@ -253,7 +253,7 @@ main::-webkit-scrollbar{width:0;}
 .dot.familia{background:var(--familia);}
 .dot.trabalho{background:var(--trabalho);}
 
-.task-list{ display:flex; flex-direction:column; gap:10px; }
+.task-list{ display:flex; flex-direction:column; gap:10px; max-height:320px; overflow-y:auto; padding-right:4px; }
 .task-card{
   background:var(--bg-card);
   border-radius:var(--radius-md);
@@ -533,6 +533,58 @@ main::-webkit-scrollbar{width:0;}
 }
 .emg-item h4{ margin:0; font-size:14px; }
 .emg-item p{ margin:0; font-size:11.5px; color:var(--ink-soft); }
+
+.emg-section{ margin-bottom:16px; }
+.emg-section-title{
+  display:block;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--ink-soft);
+  margin-bottom:8px;
+}
+.emg-hint{ margin:0 0 10px; font-size:12.5px; color:var(--ink-soft); }
+.emg-item-btn{
+  width:100%;
+  border:1px solid var(--hairline);
+  font-family:inherit;
+  cursor:pointer;
+}
+.emg-item-btn:hover{ border-color:var(--alerta); }
+.emg-checkbox-item{ cursor:pointer; transition:border-color .15s, background .15s; }
+.emg-checkbox-item input[type="checkbox"]{
+  width:18px; height:18px; accent-color:var(--alerta); flex-shrink:0;
+}
+.emg-checkbox-item.checked{ border-color:var(--alerta); background:var(--alerta-tint); }
+.emg-task-preview{
+  background:var(--bg-canvas);
+  border:1px dashed var(--hairline);
+  border-radius:14px;
+  padding:12px 14px;
+  font-size:13px;
+  color:var(--ink);
+  min-height:56px;
+}
+.emg-task-preview ul{ margin:0; padding-left:18px; }
+.emg-task-preview li{ margin-bottom:4px; }
+.emg-task-empty{ margin:0; color:var(--ink-soft); font-size:12.5px; }
+.emg-call-actions{ display:flex; flex-direction:column; gap:10px; margin:16px 0; }
+.emg-call-actions .btn-primary{ width:100%; }
+.field textarea{
+  width:100%;
+  padding:11px 12px;
+  border-radius:12px;
+  border:1px solid var(--hairline);
+  background:#fff;
+  font-family:'Plus Jakarta Sans';
+  font-size:13.5px;
+  line-height:1.55;
+  color:var(--ink);
+  outline:none;
+  resize:vertical;
+}
+.field textarea:focus{ border-color:var(--eu); }
 
 /* ---------- AGENDA (calendar) ---------- */
 .cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
